@@ -9,6 +9,7 @@ app.get("/", (c) => {
   return c.text("Hello Hono!");
 });
 app.route("/services", services);
+// app.route("/health", health);
 serve(
   {
     fetch: app.fetch,
