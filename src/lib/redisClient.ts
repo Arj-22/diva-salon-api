@@ -40,6 +40,7 @@ export async function getRedisClient() {
   if (redisClient) return redisClient;
 
   const initialUrl = resolveRedisUrl();
+  console.log("Redis URL in use:", initialUrl); // debug
   try {
     redisClient = await tryConnect(initialUrl);
   } catch (e: any) {
