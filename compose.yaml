@@ -4,13 +4,20 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
+    env_file:
+      - .env
     environment:
-      NODE_ENV: production
+      NODE_ENV: dev
       REDIS_URL: redis://redis:6379
+      CHOKIDAR_USEPOLLING: "1"
+      NODE_TLS_REJECT_UNAUTHORIZED: "0" # allow insecure TLS inside container
     depends_on:
       - redis
     ports:
       - 3001:3001
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]

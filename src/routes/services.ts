@@ -3,9 +3,11 @@ import { config } from "dotenv";
 import { Hono } from "hono";
 
 const services = new Hono();
-config();
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+config({ path: ".env" });
+const SUPABASE_URL =
+  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY =
+  process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error(
@@ -21,13 +23,16 @@ const supabase =
 services.get("/", async (c) => {
   if (!supabase) {
     return c.json(
-      { error: "Server misconfigured: missing Supabase env vars" },
+      { error: "Server misconfigured: missing Supabase env vars!" },
       500
     );
   }
-
   const { data, error } = await supabase.from("EposNowTreatment").select("*");
-  if (error) return c.json({ error: error.message }, 500);
+
+  if (error) {
+    console.error("Supabase error:", error);
+    return c.json({ error: error.message }, 500);
+  }
   return c.json({ EposNowTreatments: data });
 });
 
