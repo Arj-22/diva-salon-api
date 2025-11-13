@@ -77,6 +77,7 @@ export function rateLimit(opts: RateLimitOptions) {
       await next();
     } catch (e) {
       console.error("rateLimit middleware error:", e);
+      console.warn("Rate limiting bypassed due to error:", e);
       return next(); // fail-open on errors
     }
   };
