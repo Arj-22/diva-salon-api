@@ -104,7 +104,11 @@ treatments.post("/", async (c) => {
 treatments.patch("/:id{[0-9]+}", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
-  const treatmentId = Number(c.req.param("id"));
+  const idParam = c.req.param("id");
+  const treatmentId = Number(idParam);
+  if (isNaN(treatmentId)) {
+    return c.json({ error: "Invalid ID" }, 400);
+  }
   const body = await c.req.json();
 
   // Partial for updates
