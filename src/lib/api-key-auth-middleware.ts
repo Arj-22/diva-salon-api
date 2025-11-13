@@ -80,6 +80,14 @@ export function apiKeyAuth(options: ApiKeyAuthOptions = {}) {
     exclude = [],
   } = options;
 
+  // Load keys once during initialization
+  const allowedKeys = loadKeys({ envVar, keys });
+  if (allowedKeys.length === 0) {
+    console.warn(
+      `apiKeyAuth: no API keys configured (env: ${envVar}). All requests will be denied until configured.`
+    );
+  }
+
   return async (c: Context, next: Next) => {
     const url = new URL(
       c.req.url,
@@ -99,13 +107,12 @@ export function apiKeyAuth(options: ApiKeyAuthOptions = {}) {
       return c.json({ error: "Unauthorized" }, 401);
     }
 
-    const allowed = loadKeys({ envVar, keys });
-    if (allowed.length === 0) {
-      console.warn("apiKeyAuth: no API keys configured; denying all requests");
+    if (allowedKeys.length === 0) {
+      // Keys were missing at startup; deny without re-logging on each request
       return c.json({ error: "Unauthorized" }, 401);
     }
 
-    const match = allowed.some((k) => timingSafeEqual(provided, k));
+    const match = allowedKeys.some((k) => timingSafeEqual(provided, k));
     if (!match) {
       c.header("WWW-Authenticate", 'Bearer realm="api", error="invalid_token"');
       return c.json({ error: "Unauthorized" }, 401);
