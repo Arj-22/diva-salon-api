@@ -1,11 +1,12 @@
 import * as z from "zod";
+import { SlugSchema, emptyToUndefined } from "./TreatmentSubCategorySchema";
 
 export const TreatmentSchema = z.object({
   id: z.number().int(),
   eposNowTreatmentId: z.number().int(),
   description: z.string().nullable().optional(),
   imageUrl: z.string().nullable().optional(),
-  href: z.string().nullable().optional(),
+  href: z.preprocess(emptyToUndefined, SlugSchema.nullable().optional()),
   updated_at: z.string().nullable().optional(),
   created_at: z.string(),
   treatmentCategoryId: z.number().int(),
