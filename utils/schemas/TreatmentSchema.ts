@@ -1,5 +1,5 @@
 import * as z from "zod";
-import { SlugSchema, emptyToUndefined } from "./TreatmentSubCategorySchema";
+import { emptyToUndefined, SlugSchema } from "./common.js";
 
 export const TreatmentSchema = z.object({
   id: z.number().int(),

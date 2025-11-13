@@ -1,5 +1,5 @@
 import * as z from "zod";
-import { SlugSchema } from "./common";
+import { SlugSchema } from "./common.js";
 const emptyToUndefined = (v: unknown) => (v === "" ? undefined : v);
 // Base row schema (matches DB/returned shape)
 export const TreatmentCategorySchema = z.object({
