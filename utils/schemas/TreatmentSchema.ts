@@ -19,7 +19,9 @@ export const TreatmentInsertSchema = TreatmentSchema.omit({
 }).extend({
   eposNowTreatmentId: z.coerce.number().positive(),
   treatmentCategoryId: z.coerce.number().positive(),
-  treatmentSubCategoryId: z.coerce.number().positive().nullable().optional(),
+  treatmentSubCategoryId: z
+    .union([z.coerce.number().positive(), z.null()])
+    .optional(),
 });
 
 export type Treatment = z.infer<typeof TreatmentSchema>;

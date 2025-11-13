@@ -30,7 +30,7 @@ export function rateLimit(opts: RateLimitOptions) {
     try {
       const redis = await getRedisClient();
       let count = 0;
-      let ttl = windowSec;
+      let ttl;
 
       if (redis) {
         count = await redis.incr(rKey);

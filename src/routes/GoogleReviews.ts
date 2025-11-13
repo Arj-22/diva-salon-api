@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { cacheResponse, cacheInvalidate } from "../lib/cache-middleware.js";
-import { rateLimit } from "../lib/rate-limit-middlware.js";
+import { rateLimit } from "../lib/rate-limit-middleware.js";
 
 const googleReviews = new Hono();
 config({ path: ".env" });
@@ -95,72 +95,94 @@ googleReviews.post(
         return c.json({ message: "No reviews returned from Google", count: 0 });
       }
 
-      await Promise.all(
+      // Process each review with per-item error handling
+      const results = await Promise.all(
         reviews.map(async (review) => {
-          const text = review.text;
-          const authorAttribution = review.authorAttribution;
-          const { count, error: textCountError } = await supabase
-            .from("GooglePlaceReview")
-            .select("name", { count: "exact", head: true })
-            .eq("name", review.name);
-          if (textCountError) {
-            console.error("Failed to count existing reviews:", textCountError);
-            return;
-          }
-          if (count && count > 0) {
-            // Review already exists, skip
-            console.log("Review already exists, skipping:", review.name);
-            return;
-          }
-          const { data: reviewId, error: reviewError } = await supabase
-            .from("GooglePlaceReview")
-            .upsert({
-              name: review.name,
-              rating: review.rating,
-              publishTime: review.publishTime,
-              flagContentUri: review.flagContentUri,
-              googleMapsUri: review.googleMapsUri,
-            })
-            .select("id")
-            .single();
+          try {
+            const text = review.text;
+            const authorAttribution = review.authorAttribution;
 
-          if (!reviewId || reviewError) {
-            console.error("Failed to upsert review:", reviewError);
-            return;
-          }
-          const { data: ReviewTextId, error: reviewTextError } = await supabase
-            .from("GoogleReviewText")
-            .upsert({
-              text: text.text,
-              languageCode: text.languageCode,
-              GooglePlaceReviewId: reviewId.id,
-            })
-            .select("id")
-            .single();
+            const { count, error: existsError } = await supabase
+              .from("GooglePlaceReview")
+              .select("name", { count: "exact", head: true })
+              .eq("name", review.name);
 
-          if (!ReviewTextId || reviewTextError) {
-            console.error("Failed to upsert review text:", reviewTextError);
-            return;
-          }
+            if (existsError) {
+              throw new Error(
+                `Failed to check existing review: ${existsError.message}`
+              );
+            }
+            if (count && count > 0) {
+              return { status: "skipped", name: review.name };
+            }
 
-          const { data: authorAttributionId, error: authorAttributionError } =
-            await supabase
-              .from("GoogleAuthorAttribution")
+            const { data: reviewId, error: reviewError } = await supabase
+              .from("GooglePlaceReview")
               .upsert({
-                displayName: authorAttribution?.displayName,
-                uri: authorAttribution?.uri,
-                photoUri: authorAttribution?.photoUri,
-                GooglePlaceReviewId: reviewId.id,
+                name: review.name,
+                rating: review.rating,
+                publishTime: review.publishTime,
+                flagContentUri: review.flagContentUri,
+                googleMapsUri: review.googleMapsUri,
               })
               .select("id")
               .single();
 
-          if (!authorAttributionId || authorAttributionError) {
-            console.error(
-              "Failed to upsert Author Attribution:",
-              authorAttributionError
-            );
-            return;
+            if (!reviewId || reviewError) {
+              throw new Error(
+                `Failed to upsert review: ${reviewError?.message || "unknown"}`
+              );
+            }
+
+            if (text?.text || text?.languageCode) {
+              const { error: reviewTextError } = await supabase
+                .from("GoogleReviewText")
+                .upsert({
+                  text: text?.text,
+                  languageCode: text?.languageCode,
+                  GooglePlaceReviewId: reviewId.id,
+                })
+                .select("id")
+                .single();
+
+              if (reviewTextError) {
+                throw new Error(
+                  `Failed to upsert review text: ${reviewTextError.message}`
+                );
+              }
+            }
+
+            if (
+              authorAttribution?.displayName ||
+              authorAttribution?.uri ||
+              authorAttribution?.photoUri
+            ) {
+              const { error: authorAttributionError } = await supabase
+                .from("GoogleAuthorAttribution")
+                .upsert({
+                  displayName: authorAttribution?.displayName,
+                  uri: authorAttribution?.uri,
+                  photoUri: authorAttribution?.photoUri,
+                  GooglePlaceReviewId: reviewId.id,
+                })
+                .select("id")
+                .single();
+
+              if (authorAttributionError) {
+                throw new Error(
+                  `Failed to upsert author attribution: ${authorAttributionError.message}`
+                );
+              }
+            }
+
+            return { status: "ok", name: review.name };
+          } catch (err: any) {
+            console.error("Review processing error:", review?.name, err);
+            return {
+              status: "error",
+              name: review?.name,
+              error: err?.message || String(err),
+            };
           }
         })
       );
@@ -168,8 +190,16 @@ googleReviews.post(
       // Invalidate caches
       void cacheInvalidate("googleReviews:*").catch(() => {});
 
+      const inserted = results.filter((r) => r.status === "ok").length;
+      const skipped = results.filter((r) => r.status === "skipped").length;
+      const failed = results.filter((r) => r.status === "error");
       return c.json({
-        message: "Reviews fetched and stored",
+        message: "Reviews processed",
+        total: reviews.length,
+        inserted,
+        skipped,
+        failed: failed.length,
+        errors: failed.slice(0, 10), // limit payload size
       });
     } catch (e: any) {
       return c.json(

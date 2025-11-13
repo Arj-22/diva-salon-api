@@ -95,7 +95,7 @@ export function apiKeyAuth(options: ApiKeyAuthOptions = {}) {
       allowAuthorizationHeader,
     });
     if (!provided) {
-      c.header("WWW-Authenticate", 'ApiKey realm="api"');
+      c.header("WWW-Authenticate", 'Bearer realm="api"');
       return c.json({ error: "Unauthorized" }, 401);
     }
 
@@ -107,7 +107,7 @@ export function apiKeyAuth(options: ApiKeyAuthOptions = {}) {
 
     const match = allowed.some((k) => timingSafeEqual(provided, k));
     if (!match) {
-      c.header("WWW-Authenticate", 'ApiKey realm="api", error="invalid_token"');
+      c.header("WWW-Authenticate", 'Bearer realm="api", error="invalid_token"');
       return c.json({ error: "Unauthorized" }, 401);
     }
 

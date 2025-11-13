@@ -31,14 +31,12 @@ export const TreatmentCategoryInsertSchema = TreatmentCategorySchema.omit({
 });
 
 // Update payload (all fields optional)
-export const TreatmentCategoryUpdateSchema = z
-  .object({
-    name: z.string().min(1).optional(),
-    description: z.preprocess(emptyToUndefined, z.string().optional()),
-    imageUrl: z.preprocess(emptyToUndefined, z.string().optional()),
-    href: z.preprocess(emptyToUndefined, SlugSchema.optional()),
-  })
-  .partial();
+export const TreatmentCategoryUpdateSchema = z.object({
+  name: z.string().min(1).optional(),
+  description: z.preprocess(emptyToUndefined, z.string().optional()),
+  imageUrl: z.preprocess(emptyToUndefined, z.string().optional()),
+  href: z.preprocess(emptyToUndefined, SlugSchema.optional()),
+});
 
 export type TreatmentCategoryInsert = z.infer<
   typeof TreatmentCategoryInsertSchema
