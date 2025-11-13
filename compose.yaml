@@ -4,7 +4,7 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
-    command: sh -c "npm ci && npm run dev" # install into the mounted volume, then start
+    command: sh -c "npm run dev" # start the development server
     env_file:
       - .env
     environment:
