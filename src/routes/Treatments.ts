@@ -31,19 +31,52 @@ treatments.get(
   }
 );
 
-treatments.get("/byCategory/:treatmentCategoryId{[0-9]+}", async (c) => {
-  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+treatments.get(
+  "/byCategory/:treatmentCategoryId{[0-9]+}",
+  cacheResponse({
+    key: (c) => `treatments:id:${c.req.param("treatmentCategoryId")}`,
+    ttlSeconds: 300,
+  }),
+  async (c) => {
+    if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
-  const treatmentCategoryId = Number(c.req.param("treatmentCategoryId"));
-  const { data, error } = await supabase
-    .from("Treatment")
-    .select(
-      `* ,EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax),  TreatmentCategory (name, description) ,TreatmentSubCategory (name, description)`
-    )
-    .eq("TreatmentCategoryId", treatmentCategoryId);
-  if (error) return c.json({ error: error.message }, 500);
-  return c.json({ treatments: data });
-});
+    const treatmentCategoryId = Number(c.req.param("treatmentCategoryId"));
+    const { data, error } = await supabase
+      .from("Treatment")
+      .select(
+        `* ,EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax),  TreatmentCategory (name, description) ,TreatmentSubCategory (name, description)`
+      )
+      .eq("TreatmentCategoryId", treatmentCategoryId);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ treatments: data });
+  }
+);
+
+treatments.get(
+  "/byCategorySlug/:treatmentCategorySlug",
+  cacheResponse({
+    key: (c) =>
+      `treatments:categorySlug:${c.req.param("treatmentCategorySlug")}`,
+    ttlSeconds: 300,
+  }),
+  async (c) => {
+    if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+    const treatmentCategorySlug = c.req.param("treatmentCategorySlug");
+    const { data, error } = await supabase
+      .from("Treatment")
+      .select(
+        `*,
+       EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax),
+       TreatmentCategory!inner(id, name, description, href),
+       TreatmentSubCategory(name, description)`
+      )
+      .eq("TreatmentCategory.href", treatmentCategorySlug);
+
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ treatments: data });
+  }
+);
 
 treatments.post("/", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
