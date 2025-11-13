@@ -1,0 +1,67 @@
+import { Hono } from "hono";
+import { createClient } from "@supabase/supabase-js";
+import { config } from "dotenv";
+import { cacheInvalidate, cacheResponse } from "../lib/cache-middleware.js";
+
+const treatmentSubCategories = new Hono();
+config({ path: ".env" });
+
+const SUPABASE_URL =
+  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY =
+  process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const supabase =
+  SUPABASE_URL && SUPABASE_ANON_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
+
+// GET / -> cache full payload at a stable key
+
+treatmentSubCategories.get(
+  "/",
+  cacheResponse({ key: "treatmentSubCategories:all", ttlSeconds: 300 }),
+  async (c) => {
+    if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+    const { data, error } = await supabase
+      .from("TreatmentSubCategory")
+      .select("*");
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ treatmentSubCategories: data });
+  }
+);
+
+treatmentSubCategories.get(
+  "/:id{[0-9]+}",
+  cacheResponse({
+    key: (c) => `treatmentSubCategories:id:${c.req.param("id")}`,
+    ttlSeconds: 300,
+  }),
+  async (c) => {
+    if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+    const id = Number(c.req.param("id"));
+    const { data, error } = await supabase
+      .from("TreatmentSubCategory")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ treatmentSubCategory: data });
+  }
+);
+
+treatmentSubCategories.post("/", async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+  const body = await c.req.json();
+  const { data, error } = await supabase
+    .from("TreatmentSubCategory")
+    .insert(body)
+    .select()
+    .single();
+  if (error) return c.json({ error: error.message }, 500);
+  void cacheInvalidate("treatmentSubCategories:*").catch(() => {});
+  return c.json({ treatmentSubCategory: data });
+});
+export default treatmentSubCategories;

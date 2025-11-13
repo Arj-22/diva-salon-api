@@ -8,7 +8,11 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.6",
-    "hono": "^4.10.4"
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.81.1",
+    "dotenv": "^17.2.3",
+    "hono": "^4.10.4",
+    "redis": "^5.9.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.17",
