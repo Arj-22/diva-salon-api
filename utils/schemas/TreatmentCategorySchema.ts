@@ -1,15 +1,6 @@
 import * as z from "zod";
-
+import { SlugSchema } from "./common";
 const emptyToUndefined = (v: unknown) => (v === "" ? undefined : v);
-
-// Slug (href) like "hair-treatments"
-const SlugSchema = z
-  .string()
-  .regex(
-    /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-    "Must be a URL-friendly slug (lowercase, hyphens)"
-  );
-
 // Base row schema (matches DB/returned shape)
 export const TreatmentCategorySchema = z.object({
   id: z.string().min(1),
