@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { cacheInvalidate, cacheResponse } from "../lib/cache-middleware.js";
+import { TreatmentInsertSchema } from "../../utils/schemas/TreatmentSchema.js";
+import { formatZodError } from "../../utils/helpers.js";
 
 const treatments = new Hono();
 config({ path: ".env" });
@@ -82,14 +84,53 @@ treatments.post("/", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
   const body = await c.req.json();
+  const parsed = await TreatmentInsertSchema.safeParseAsync(body);
+  if (!parsed.success) {
+    return c.json(formatZodError(parsed.error), 400);
+  }
+
   const { data, error } = await supabase
     .from("Treatment")
-    .insert(body)
+    .insert(parsed.data)
     .select()
     .single();
+
   if (error) return c.json({ error: error.message }, 500);
+
   void cacheInvalidate("treatments:*").catch(() => {});
-  return c.json({ treatment: data });
+  return c.json({ treatment: data }, 201);
+});
+
+treatments.patch("/:id{[0-9]+}", async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+  const idParam = c.req.param("id");
+  const treatmentId = Number(idParam);
+  if (isNaN(treatmentId)) {
+    return c.json({ error: "Invalid ID" }, 400);
+  }
+  const body = await c.req.json();
+
+  // Partial for updates
+  const parsed = await TreatmentInsertSchema.partial().safeParseAsync(body);
+  if (!parsed.success) {
+    return c.json(formatZodError(parsed.error), 400);
+  }
+
+  const { data, error } = await supabase
+    .from("Treatment")
+    .update(parsed.data)
+    .eq("id", treatmentId)
+    .select()
+    .single();
+
+  if (error) return c.json({ error: error.message }, 500);
+
+  void cacheInvalidate("treatments:*").catch(() => {});
+  return c.json({
+    message: "Treatment updated successfully",
+    treatment: data,
+  });
 });
 
 export default treatments;

@@ -47,3 +47,28 @@ export type TreatmentCategory = {
   updated_at?: string;
   created_at?: string;
 };
+
+// export type Treatment = {
+//   id: number;
+//   eposNowTreatmentId: number;
+//   description?: string | null;
+//   imageUrl?: string | null;
+//   href?: string | null;
+//   updated_at?: string | null;
+//   created_at: string; // ISO
+//   TreatmentCategoryId: number;
+//   TreatmentSubCategoryId: number;
+//   EposNowTreatment: Partial<EposNowTreatment>;
+//   TreatmentCategory: Partial<TreatmentCategory>;
+//   TreatmentSubCategory: Partial<TreatmentSubCategory>;
+// };
+export type TreatmentSubCategory = {
+  id: number;
+  name: string;
+  description?: string | null;
+  href?: string | null;
+  imageUrl?: string | null;
+  treatmentCategoryId: number;
+  updated_at?: string | null;
+  created_at: string; // ISO
+};
