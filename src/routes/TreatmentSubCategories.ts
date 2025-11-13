@@ -78,6 +78,9 @@ treatmentSubCategories.patch("/:id{[0-9]+}", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
   const id = Number(c.req.param("id"));
+  if (isNaN(id)) {
+    return c.json({ error: "Invalid ID" }, 400);
+  }
   const body = await c.req.json();
 
   // Validate partial update
