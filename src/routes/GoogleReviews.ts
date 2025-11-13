@@ -52,7 +52,7 @@ googleReviews.get(
 );
 
 // Fetch from Google, upsert children, then upsert parent with FKs
-googleReviews.get("/fetchReviewsFromGoogle", async (c) => {
+googleReviews.post("/fetchReviewsFromGoogle", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
   if (!GOOGLE_PLACES_API_KEY || !placeId) {
     return c.json(
