@@ -68,7 +68,7 @@ export function rateLimit(opts: RateLimitOptions) {
         c.header("Retry-After", String(ttl > 0 ? ttl : windowSec));
         return c.json(
           {
-            error: `Too Many Requests, you can only call this ${limit} times every ${windowSec} seconds.`,
+            error: `Rate limit exceeded. This endpoint allows ${limit} requests per ${windowSec} seconds.`,
           },
           429
         );
