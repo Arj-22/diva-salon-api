@@ -24,7 +24,7 @@ eposNowTreatments.get(
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
     const { data, error } = await supabase.from("EposNowTreatment").select("*");
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ EposNowTreatments: data });
+    return c.json({ eposNowTreatments: data });
   }
 );
 

@@ -6,8 +6,18 @@ import googleReviews from "./routes/GoogleReviews.js";
 import treatmentCategories from "./routes/TreatmentCategories.js";
 import treatmentSubCategories from "./routes/TreatmentSubCategories.js";
 import treatments from "./routes/Treatments.js";
+import { apiKeyAuth } from "./lib/api-key-auth-middleware.js";
 
 const app = new Hono();
+
+app.use(
+  "*",
+  apiKeyAuth({
+    // Configure via env API_KEYS="key1,key2"
+    // Exclude health if you want it public:
+    exclude: ["/health"], // remove this line to protect /health too
+  })
+);
 
 app.get("/", (c) => {
   return c.text("Hello Hono!");

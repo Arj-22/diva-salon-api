@@ -2,6 +2,11 @@ import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { cacheInvalidate, cacheResponse } from "../lib/cache-middleware.js";
+import {
+  TreatmentCategoryInsertSchema,
+  TreatmentCategoryUpdateSchema,
+} from "../../utils/schemas/TreatmentCategorySchema.js";
+import { formatZodError } from "../../utils/helpers.js";
 
 const treatmentCategories = new Hono();
 config({ path: ".env" });
@@ -52,15 +57,46 @@ treatmentCategories.get(
 
 treatmentCategories.post("/", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
-
   const body = await c.req.json();
+
+  const parsed = await TreatmentCategoryInsertSchema.safeParseAsync(body);
+  if (!parsed.success) {
+    return c.json(formatZodError(parsed.error), 400);
+  }
+
   const { data, error } = await supabase
     .from("TreatmentCategory")
-    .insert(body)
+    .insert(parsed.data)
     .select()
     .single();
   if (error) return c.json({ error: error.message }, 500);
+
   void cacheInvalidate("treatmentCategories:*").catch(() => {});
-  return c.json({ treatmentCategory: data });
+  return c.json({ treatmentCategory: data }, 201);
 });
+
+treatmentCategories.patch("/:id{[0-9]+}", async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+  const body = await c.req.json();
+
+  const parsed = await TreatmentCategoryUpdateSchema.safeParseAsync(body);
+  if (!parsed.success) {
+    return c.json(formatZodError(parsed.error), 400);
+  }
+
+  const { data, error } = await supabase
+    .from("TreatmentCategory")
+    .update(parsed.data)
+    .eq("id", Number(c.req.param("id")))
+    .select()
+    .single();
+  if (error) return c.json({ error: error.message }, 500);
+
+  void cacheInvalidate("treatmentCategories:*").catch(() => {});
+  return c.json({
+    message: "Treatment category updated",
+    treatmentCategory: data,
+  });
+});
+
 export default treatmentCategories;

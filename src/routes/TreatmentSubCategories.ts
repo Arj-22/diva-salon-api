@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { cacheInvalidate, cacheResponse } from "../lib/cache-middleware.js";
+import { TreatmentSubCategoryInsertSchema } from "../../utils/schemas/TreatmentSubCategorySchema.js";
+import { formatZodError } from "../../utils/helpers.js";
 
 const treatmentSubCategories = new Hono();
 config({ path: ".env" });
@@ -17,7 +19,6 @@ const supabase =
     : null;
 
 // GET / -> cache full payload at a stable key
-
 treatmentSubCategories.get(
   "/",
   cacheResponse({ key: "treatmentSubCategories:all", ttlSeconds: 300 }),
@@ -51,17 +52,55 @@ treatmentSubCategories.get(
   }
 );
 
+// POST / -> validate body and format errors
 treatmentSubCategories.post("/", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
   const body = await c.req.json();
+  const parsed = await TreatmentSubCategoryInsertSchema.safeParseAsync(body);
+  if (!parsed.success) {
+    return c.json(formatZodError(parsed.error), 400);
+  }
+
   const { data, error } = await supabase
     .from("TreatmentSubCategory")
-    .insert(body)
+    .insert(parsed.data)
     .select()
     .single();
+
   if (error) return c.json({ error: error.message }, 500);
+
   void cacheInvalidate("treatmentSubCategories:*").catch(() => {});
-  return c.json({ treatmentSubCategory: data });
+  return c.json({ treatmentSubCategory: data }, 201);
 });
+
+treatmentSubCategories.patch("/:id{[0-9]+}", async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+  const id = Number(c.req.param("id"));
+  const body = await c.req.json();
+
+  // Validate partial update
+  const parsed =
+    await TreatmentSubCategoryInsertSchema.partial().safeParseAsync(body);
+  if (!parsed.success) {
+    return c.json(formatZodError(parsed.error), 400);
+  }
+
+  const { data, error } = await supabase
+    .from("TreatmentSubCategory")
+    .update(parsed.data)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) return c.json({ error: error.message }, 500);
+
+  void cacheInvalidate("treatmentSubCategories:*").catch(() => {});
+  return c.json({
+    message: "Treatment subcategory updated",
+    treatmentSubCategory: data,
+  });
+});
+
 export default treatmentSubCategories;

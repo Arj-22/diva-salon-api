@@ -4,6 +4,7 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
+    command: sh -c "npm ci && npm run dev" # install into the mounted volume, then start
     env_file:
       - .env
     environment:
@@ -11,6 +12,7 @@ services:
       REDIS_URL: redis://redis:6379
       CHOKIDAR_USEPOLLING: "1"
       NODE_TLS_REJECT_UNAUTHORIZED: "0" # allow insecure TLS inside container
+      API_KEYS: test-key-1,test-key-2
     depends_on:
       - redis
     ports:
