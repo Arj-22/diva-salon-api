@@ -7,6 +7,8 @@ import treatmentCategories from "./routes/TreatmentCategories.js";
 import treatmentSubCategories from "./routes/TreatmentSubCategories.js";
 import treatments from "./routes/Treatments.js";
 import { apiKeyAuth } from "./lib/api-key-auth-middleware.js";
+import bookings from "./routes/Booking.js";
+import clients from "./routes/Clients.js";
 
 const app = new Hono();
 
@@ -27,6 +29,8 @@ app.route("/googleReviews", googleReviews);
 app.route("/treatmentCategories", treatmentCategories);
 app.route("/treatmentSubCategories", treatmentSubCategories);
 app.route("/treatments", treatments);
+app.route("/clients", clients);
+app.route("/bookings", bookings);
 app.route("/health", health);
 serve(
   {
