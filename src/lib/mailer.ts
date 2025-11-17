@@ -1,46 +1,18 @@
 import { Resend } from "resend";
 
-let client: Resend | null = null;
+const resend = new Resend("re_xxxxxxxxx");
 
-function getClient() {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) throw new Error("Mailer misconfigured: set RESEND_API_KEY");
-  if (!client) client = new Resend(key);
-  return client;
-}
+(async function sendEmail() {
+  const { data, error } = await resend.emails.send({
+    from: "Acme <onboarding@resend.dev>",
+    to: ["delivered@resend.dev"],
+    subject: "Hello World",
+    html: "<strong>It works!</strong>",
+  });
 
-export async function sendMail(opts: {
-  to: string | string[];
-  subject: string;
-  text?: string;
-  html?: string;
-  from?: string;
-}) {
-  const from = opts.from || process.env.MAIL_FROM;
-  if (!from) throw new Error("MAIL_FROM not set");
-
-  const resend = getClient();
-
-  if (!opts.html && !opts.text) {
-    throw new Error("sendMail requires either html or text content");
+  if (error) {
+    return console.error({ error });
   }
 
-  const base = {
-    from,
-    to: Array.isArray(opts.to) ? opts.to : [opts.to],
-    subject: opts.subject,
-  };
-
-  const res = await resend.emails.send(
-    opts.html
-      ? { ...base, html: opts.html }
-      : { ...base, text: opts.text as string }
-  );
-
-  if ((res as any).error) {
-    throw new Error(
-      `Email send failed: ${(res as any).error.message || "unknown"}`
-    );
-  }
-  return res;
-}
+  console.log({ data });
+})();
