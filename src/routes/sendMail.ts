@@ -20,7 +20,7 @@ const resend = new Resend("re_2ek2W2D4_Jx8ExU54qivwbfwgci6wpuPf");
 const sendEmail = async () => {
   const { data, error } = await resend.emails.send({
     from: "Acme <onboarding@resend.dev>",
-    to: ["delivered@resend.dev"],
+    to: ["arjunnahar1234@gmail.com"],
     subject: "Hello World",
     html: "<strong>It works!</strong>",
   });
@@ -33,7 +33,14 @@ const sendEmail = async () => {
 };
 
 email.post("/send", async (c) => {
-  await sendEmail();
+  console.log("Send email endpoint hit");
+
+  try {
+    await sendEmail();
+  } catch (err) {
+    console.error("Error sending email:", err);
+    return c.json({ error: "Failed to send email" }, 500);
+  }
 
   return c.json({ message: "Sent" });
 });

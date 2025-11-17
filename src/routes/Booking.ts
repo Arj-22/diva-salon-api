@@ -4,6 +4,8 @@ import { config } from "dotenv";
 import { validateBooking } from "../lib/validation-middleware.js";
 import { cacheResponse } from "../lib/cache-middleware.js";
 import { hcaptchaVerify } from "../lib/hcaptcha-middleware.js";
+import { sendEmail } from "../lib/mailer.js";
+import { bookingConfirmationTemplate } from "../../utils/emailTemplates/bookingConfirmation.js";
 // import { sendMail } from "../lib/mailer.js";
 
 const bookings = new Hono();
@@ -26,8 +28,8 @@ bookings.post(
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
+    // Use validated booking data (avoid re-parsing)
     const res = await c.req.json();
-
     const bookingData = {
       name: res.name,
       email: res.email,
@@ -36,12 +38,7 @@ bookings.post(
       treatmentIds: res.treatmentIds,
     };
 
-    const bookingPayload = {
-      message: bookingData.message || null,
-      clientId: 0, // Placeholder, will be updated after client creation
-    };
-
-    // 1. Find or create client
+    // Find or create client
     const emailLower = bookingData.email?.toLowerCase().trim();
     let clientRow: {
       id: number;
@@ -109,7 +106,6 @@ bookings.post(
         })
         .select("id,name,email,phoneNumber")
         .single();
-
       if (createClientError || !createdClient) {
         return c.json(
           {
@@ -123,7 +119,12 @@ bookings.post(
       newClientCreated = true;
     }
 
-    // 2. Create booking (no upsert: always new)
+    // Define booking payload now with real clientId
+    const bookingPayload = {
+      message: bookingData.message || null,
+      clientId: clientRow.id,
+    };
+
     const { data: bookingRow, error: bookingError } = await supabase
       .from("Booking")
       .insert(bookingPayload)
@@ -175,70 +176,19 @@ bookings.post(
       );
     }
 
-    // Build email payloads
-    // const salonTo = process.env.SALON_NOTIFY_TO;
-    // const userTo = bookingData.email?.toLowerCase().trim();
-
-    // const treatmentList = bookingData.treatmentIds.join(", ");
-    // const bookingId = bookingRow.id;
-
-    // const userSubject = `Diva Salon: We received your booking request (#${bookingId})`;
-    // const userHtml = `
-    //   <p>Hi ${bookingData.name},</p>
-    //   <p>Thanks for your booking request. We’ll review and get back to you shortly.</p>
-    //   <p><strong>Details</strong></p>
-    //   <ul>
-    //     <li>Booking ID: ${bookingId}</li>
-    //     <li>Treatments: ${treatmentList}</li>
-    //     ${bookingData.message ? `<li>Message: ${bookingData.message}</li>` : ""}
-    //     ${bookingData.phone ? `<li>Phone: ${bookingData.phone}</li>` : ""}
-    //     ${bookingData.email ? `<li>Email: ${bookingData.email}</li>` : ""}
-    //   </ul>
-    //   <p>Kind regards,<br/>Diva Salon</p>
-    // `;
-
-    // const salonSubject = `New booking request (#${bookingId}) from ${bookingData.name}`;
-    // const salonHtml = `
-    //   <p>New booking received.</p>
-    //   <ul>
-    //     <li>Booking ID: ${bookingId}</li>
-    //     <li>Name: ${bookingData.name}</li>
-    //     ${bookingData.email ? `<li>Email: ${bookingData.email}</li>` : ""}
-    //     ${bookingData.phone ? `<li>Phone: ${bookingData.phone}</li>` : ""}
-    //     <li>Treatment IDs: ${treatmentList}</li>
-    //     ${bookingData.message ? `<li>Message: ${bookingData.message}</li>` : ""}
-    //     <li>Client ID: ${clientRow.id}</li>
-    //   </ul>
-    // `;
-
-    // // Fire emails (don’t fail booking if email sending fails)
-    // const tasks: Promise<any>[] = [];
-    // if (userTo) {
-    //   tasks.push(
-    //     sendMail({
-    //       to: userTo,
-    //       subject: userSubject,
-    //       html: userHtml,
-    //       text: userHtml.replace(/<[^>]+>/g, ""),
-    //     }).catch((e) => console.error("User email failed:", e))
-    //   );
-    // }
-    // if (salonTo) {
-    //   tasks.push(
-    //     sendMail({
-    //       to: salonTo,
-    //       subject: salonSubject,
-    //       html: salonHtml,
-    //       text: salonHtml.replace(/<[^>]+>/g, ""),
-    //     }).catch((e) => console.error("Salon email failed:", e))
-    //   );
-    // } else {
-    //   console.warn(
-    //     "SALON_NOTIFY_TO not set; skipping salon notification email"
-    //   );
-    // }
-    // // Run without blocking response too long
-    // void Promise.allSettled(tasks);
+    try {
+      await sendEmail({
+        to: ["arjunnahar1234@gmail.com"],
+        subject: "New Booking Created",
+        html: bookingConfirmationTemplate({
+          name: bookingData.name,
+          treatmentIds,
+        }),
+      });
+    } catch (err) {
+      console.error("Error sending email:", err);
+      return c.json({ error: "Failed to send email" }, 500);
+    }
 
     return c.json(
       {
@@ -295,8 +245,7 @@ bookings.get(
   }),
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
-
-    const id = Number(c.req.param("id"));
+    const id = Number(c.req.param("bookingId"));
     const { data, error } = await supabase
       .from("Booking")
       .select(
@@ -367,5 +316,4 @@ bookings.get(
     return c.json({ bookings });
   }
 );
-
 export default bookings;
