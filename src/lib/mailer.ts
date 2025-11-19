@@ -10,8 +10,9 @@ interface EmailData {
 
 export const sendEmail = async (emailData: EmailData) => {
   const { data, error } = await resend.emails.send({
-    from: "Acme <onboarding@resend.dev>",
+    from: "Diva Salon <info@divasalonandacademy.co.uk>",
     to: emailData.to,
+    bcc: ["info@divasalonandacademy.co.uk"],
     subject: emailData.subject,
     html: emailData.html,
   });

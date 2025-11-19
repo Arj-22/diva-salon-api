@@ -176,13 +176,39 @@ bookings.post(
       );
     }
 
+    const { data: selectedTreatments, error: selectTreatmentsError } =
+      await supabase
+        .from("Treatment")
+        .select(`EposNowTreatment(*)`)
+        .in("id", treatmentIds);
+
+    if (selectTreatmentsError) {
+      console.error(
+        "Failed to fetch selected treatments:",
+        selectTreatmentsError
+      );
+
+      return c.json({ error: "Failed to fetch selected treatments" }, 500);
+    }
+
+    // Ensure the template receives a single EposNowTreatment object per item.
+    const treatmentsForEmail = (selectedTreatments ?? [])
+      .map((t: any) => {
+        const epos = Array.isArray(t.EposNowTreatment)
+          ? t.EposNowTreatment[0]
+          : t.EposNowTreatment;
+        return epos ? { EposNowTreatment: epos } : null;
+      })
+      .filter(Boolean) as { EposNowTreatment: any }[];
+
     try {
       await sendEmail({
-        to: ["arjunnahar1234@gmail.com"],
+        to: [bookingData.email],
         subject: "New Booking Created",
         html: bookingConfirmationTemplate({
           name: bookingData.name,
-          treatmentIds,
+          treatments: treatmentsForEmail,
+          message: bookingData.message,
         }),
       });
     } catch (err) {
