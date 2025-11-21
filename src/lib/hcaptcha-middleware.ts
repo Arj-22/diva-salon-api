@@ -22,7 +22,6 @@ export function hcaptchaVerify(
       try {
         body = await c.req.json();
         c.set("jsonBody", body);
-        (c.req as any).json = async () => body;
       } catch {
         body = {};
       }
