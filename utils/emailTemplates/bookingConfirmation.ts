@@ -1,5 +1,4 @@
 import type { EposNowTreatment } from "../../src/lib/types.js";
-import type { Treatment } from "../schemas/TreatmentSchema.js";
 
 export function bookingConfirmationTemplate(opts: {
   name: string;
