@@ -18,9 +18,13 @@ const supabase =
 
 const resend = new Resend("re_2ek2W2D4_Jx8ExU54qivwbfwgci6wpuPf");
 const sendEmail = async () => {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (!adminEmail) {
+    throw new Error("ADMIN_EMAIL environment variable is not set");
+  }
   const { data, error } = await resend.emails.send({
     from: "Acme <onboarding@resend.dev>",
-    to: ["arjunnahar1234@gmail.com"],
+    to: [adminEmail],
     subject: "Hello World",
     html: "<strong>It works!</strong>",
   });
