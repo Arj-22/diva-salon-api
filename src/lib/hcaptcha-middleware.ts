@@ -9,12 +9,12 @@ export function hcaptchaVerify(
   const configuredSecret = opts.secret ?? process.env.HCAPTCHA_SECRET_KEY;
 
   if (!configuredSecret && !warnedMissingSecret) {
-    console.warn("hcaptchaVerify: HCAPTCHA_SECRET not set");
+    console.warn("hcaptchaVerify: HCAPTCHA_SECRET_KEY not set");
     warnedMissingSecret = true;
   }
 
   return async (c: Context, next: Next) => {
-    const secret = configuredSecret || process.env.HCAPTCHA_SECRET;
+    const secret = configuredSecret || process.env.HCAPTCHA_SECRET_KEY;
     if (!secret) return c.json({ error: "Captcha misconfigured" }, 500);
 
     let body: any = c.get("jsonBody");
