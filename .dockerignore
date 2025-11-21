@@ -22,3 +22,9 @@
 **/values.dev.yaml
 LICENSE
 README.md
+node_modules
+.git
+.gitignore
+Dockerfile
+dist
+.env

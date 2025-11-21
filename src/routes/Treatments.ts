@@ -34,6 +34,55 @@ treatments.get(
 );
 
 treatments.get(
+  "/groupedByCategory",
+  cacheResponse({ key: "treatments:groupedByCategory", ttlSeconds: 300 }),
+  async (c) => {
+    if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+    const { data, error } = await supabase.from("Treatment").select(`
+        *,
+        EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax),
+        TreatmentCategory(id, name, description, href),
+        TreatmentSubCategory(name, description)
+      `);
+
+    if (error) return c.json({ error: error.message }, 500);
+
+    const rows = Array.isArray(data) ? data : [];
+    // Group by category (uncategorized bucket if missing)
+    const groups = new Map<string | number, any>();
+
+    for (const row of rows) {
+      const cat = (row as any).TreatmentCategory || null;
+      const key = cat?.id ?? "uncategorized";
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          id: cat?.id ?? null,
+          name: cat?.name ?? "Uncategorized",
+          href: cat?.href ?? null,
+          description: cat?.description ?? null,
+          treatments: [] as any[],
+        });
+      }
+
+      // Avoid duplicating the category object inside each treatment
+      const { TreatmentCategory, ...treatment } = row as any;
+      groups.get(key).treatments.push(treatment);
+    }
+
+    // Sort categories by name (Uncategorized last)
+    const categories = Array.from(groups.values()).sort((a, b) => {
+      if (a.id === null) return 1;
+      if (b.id === null) return -1;
+      return String(a.name).localeCompare(String(b.name));
+    });
+
+    return c.json(categories);
+  }
+);
+
+treatments.get(
   "/byCategory/:treatmentCategoryId{[0-9]+}",
   cacheResponse({
     key: (c) => `treatments:id:${c.req.param("treatmentCategoryId")}`,
@@ -48,7 +97,7 @@ treatments.get(
       .select(
         `* ,EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax),  TreatmentCategory (name, description) ,TreatmentSubCategory (name, description)`
       )
-      .eq("TreatmentCategoryId", treatmentCategoryId);
+      .eq("treatmentCategoryId", treatmentCategoryId);
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ treatments: data });
   }
