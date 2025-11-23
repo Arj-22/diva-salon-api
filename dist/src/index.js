@@ -10,18 +10,12 @@ import { apiKeyAuth } from "./lib/api-key-auth-middleware.js";
 import bookings from "./routes/Booking.js";
 import clients from "./routes/Clients.js";
 import email from "./routes/sendMail.js";
-
 const app = new Hono();
-
-app.use(
-  "*",
-  apiKeyAuth({
+app.use("*", apiKeyAuth({
     // Configure via env API_KEYS="key1,key2"
     // Exclude health if you want it public:
     exclude: ["/health"], // remove this line to protect /health too
-  })
-);
-
+}));
 app.route("/eposNowTreatments", eposNowTreatments);
 app.route("/googleReviews", googleReviews);
 app.route("/treatmentCategories", treatmentCategories);
@@ -31,16 +25,12 @@ app.route("/clients", clients);
 app.route("/bookings", bookings);
 app.route("/sendMail", email);
 app.route("/health", health); // or just inline handler
-
 // app.get("/", (c) => {
 //   return c.text("Hello Hono!");
 // });
-serve(
-  {
+serve({
     fetch: app.fetch,
     port: 3001,
-  },
-  (info) => {
+}, (info) => {
     console.log(`Server is running on http://localhost:${info.port}`);
-  }
-);
+});
