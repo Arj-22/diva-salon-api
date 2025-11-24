@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { cacheResponse, cacheIdsViaAll } from "../lib/cache-middleware.js";
+import { json } from "zod";
+import type { EposNowTreatment } from "../lib/types.js";
 
 const eposNowTreatments = new Hono();
 config({ path: ".env" });
@@ -86,5 +88,75 @@ eposNowTreatments.get(
     return c.json({ eposNowTreatments: data });
   }
 );
+
+eposNowTreatments.post("/upsertEposTreatments", async (c) => {
+  // This is a placeholder for the actual implementation
+  // You would typically call an external API to fetch treatments
+  // and then upsert them into your Supabase database
+
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+  const EPOS_NOW_URL = process.env.EPOS_NOW_URL;
+
+  // fetch properly and check status
+  const res = await fetch(EPOS_NOW_URL + "/Product", {
+    method: "GET",
+    headers: {
+      Authorization: `Basic ${process.env.AUTHORIZATION_TOKEN}`,
+      "Content-type": "application/xml",
+    },
+  });
+
+  if (!res || !res.ok) {
+    const text = res ? await res.text().catch(() => "") : "";
+    return c.json(
+      { error: "Failed to fetch treatments from Epos Now", details: text },
+      500
+    );
+  }
+
+  const text = await res.text();
+  let treatments: any[] = [];
+  try {
+    treatments = JSON.parse(text);
+  } catch (err) {
+    return c.json(
+      { error: "Failed to parse Epos Now response", details: String(err) },
+      500
+    );
+  }
+
+  if (!Array.isArray(treatments) || treatments.length === 0) {
+    return c.json({ message: "No treatments to upsert" });
+  }
+
+  // Build payloads for upsert and use Name as the conflict target
+  const payloads = treatments.map((t: any) => ({
+    EposNowId: t.Id,
+    Name: t.Name,
+    Description: t.Description ?? null,
+    SalePriceIncTax: t.IsSalePriceIncTax ? t.SalePrice : null,
+    SalePriceExTax: !t.IsSalePriceIncTax ? t.SalePrice : null,
+    EposCategoryId: t.CategoryId ?? null,
+    updated_at: new Date().toISOString(),
+  }));
+
+  // Upsert in a single call using Name to determine conflicts
+  const { data: upserted, error: upsertError } = await supabase
+    .from("EposNowTreatment")
+    .upsert(payloads)
+    .select();
+
+  if (upsertError) {
+    return c.json(
+      { error: "Failed to upsert treatments", details: upsertError.message },
+      500
+    );
+  }
+
+  return c.json({
+    message: "Epos Now treatments upserted successfully.",
+    upsertedCount: Array.isArray(upserted) ? upserted.length : 0,
+  });
+});
 
 export default eposNowTreatments;
