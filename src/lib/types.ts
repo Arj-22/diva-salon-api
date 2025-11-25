@@ -15,6 +15,17 @@ export type EposTaxGroup = {
   TaxRates: EposTaxRate[];
 };
 
+export type RawEposCategory = {
+  Id: number;
+  ParentId: number | null;
+  RootParentId: number | null;
+  Name: string;
+  Description?: string | null;
+  ImageUrl?: string | null;
+  ShowOnTill: boolean;
+  Children?: RawEposCategory[];
+};
+
 export type EposNowTreatment = {
   Id: number;
   Name: string;
@@ -23,6 +34,7 @@ export type EposNowTreatment = {
   IsCostPriceIncTax: boolean;
   SalePrice: number;
   IsSalePriceIncTax: boolean;
+  SalePriceIncTax: number;
   EatOutPrice: number;
   IsEatOutPriceIncTax: boolean;
 
@@ -116,6 +128,20 @@ export type TreatmentCategory = {
   href?: string;
   updated_at?: string;
   created_at?: string;
+};
+
+export type EposNowCategory = {
+  Id: number;
+  ParentId?: number | null;
+  RootParentId?: number | null;
+  Name: string;
+  Description?: string | null;
+  ImageUrl?: string | null;
+  PopupNoteId?: number | null;
+  IsWet: boolean;
+  ShowOnTill: boolean;
+  ReferenceCode?: string | null;
+  PopupNote?: string | null;
 };
 
 // export type Treatment = {

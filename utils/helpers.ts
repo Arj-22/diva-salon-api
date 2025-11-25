@@ -1,4 +1,5 @@
 import { ZodError } from "zod";
+import type { RawEposCategory } from "../src/lib/types.js";
 export const emptyToNull = <T extends Record<string, any>>(obj: T): T => {
   const out: any = {};
   for (const [k, v] of Object.entries(obj)) out[k] = v === "" ? null : v;
@@ -30,4 +31,34 @@ export function formatZodError(err: ZodError) {
     error: "Validation failed",
     issues: err.issues.map(serializeIssue),
   };
+}
+
+export function flattenCategories(
+  categories: RawEposCategory[]
+): RawEposCategory[] {
+  const flat: RawEposCategory[] = [];
+
+  const visit = (cat: RawEposCategory, parentId: number | null) => {
+    const self: RawEposCategory = {
+      Id: cat.Id,
+      ParentId: parentId ?? cat.ParentId ?? null,
+      RootParentId: cat.RootParentId ?? parentId ?? null,
+      Name: cat.Name,
+      Description: cat.Description ?? null,
+      ImageUrl: cat.ImageUrl ?? null,
+      ShowOnTill: Boolean(cat.ShowOnTill),
+    };
+    flat.push(self);
+
+    if (Array.isArray(cat.Children)) {
+      for (const child of cat.Children) {
+        visit(child, cat.Id);
+      }
+    }
+  };
+
+  for (const top of categories) {
+    visit(top, top.ParentId ?? null);
+  }
+  return flat;
 }
