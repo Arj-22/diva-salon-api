@@ -2,9 +2,6 @@ import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { cacheResponse, cacheIdsViaAll } from "../lib/cache-middleware.js";
-import { json } from "zod";
-import type { EposNowTreatment } from "../lib/types.js";
-import { flattenCategories } from "../../utils/helpers.js";
 
 const eposNowTreatments = new Hono();
 config({ path: ".env" });
@@ -97,7 +94,7 @@ eposNowTreatments.get("/getEposProducts", async (c) => {
   const res = await fetch(EPOS_NOW_URL + "/Product", {
     method: "GET",
     headers: {
-      Authorization: `Basic WVBSUTdONFZFMEpZWVZTVkk1OUNGTUZYRzBYRDgxVk06QjVHSlE4UjdJWlFUT1IwSUNPNkw2UVU4UkVVRVVET1c=`,
+      Authorization: `Basic ${process.env.AUTHORIZATION_TOKEN}`,
       "Content-type": "application/xml",
     },
   });
@@ -183,60 +180,6 @@ eposNowTreatments.post("/upsertEposTreatments", async (c) => {
     message: "Epos Now treatments upserted successfully.",
     upsertedCount: Array.isArray(upserted) ? upserted.length : 0,
   });
-});
-
-eposNowTreatments.post("/upsertCategories", async (c) => {
-  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
-
-  // fetch properly and check status
-  const res = await fetch(EPOS_NOW_URL + "/Category", {
-    method: "GET",
-    headers: {
-      Authorization: `Basic ${process.env.AUTHORIZATION_TOKEN}`,
-      // "Content-type": "application/xml",
-    },
-  });
-
-  if (!res || !res.ok) {
-    const text = res ? await res.text().catch(() => "") : "";
-    return c.json(
-      { error: "Failed to fetch treatments from Epos Now", details: text },
-      500
-    );
-  }
-
-  const categories = JSON.parse(await res.text());
-
-  if (!Array.isArray(categories) || categories.length === 0) {
-    return c.json({ message: "No categories to upsert" });
-  }
-
-  const flattened = flattenCategories(categories);
-
-  const payloads = flattened.map((cat) => ({
-    CategoryIdEpos: cat.Id,
-    Name: cat.Name,
-    Description: cat.Description ?? null,
-    ParentId: cat.ParentId ?? null,
-    RootParentId: cat.RootParentId ?? null,
-    ShowOnTill: cat.ShowOnTill,
-    ImageUrl: cat.ImageUrl ?? null,
-    updated_at: new Date().toISOString(),
-  }));
-
-  // Upsert in a single call using EposNowId to determine conflicts
-  const { data: upserted, error: upsertError } = await supabase
-    .from("EposNowCategory")
-    .upsert(payloads)
-    .select();
-
-  if (upsertError) {
-    return c.json(
-      { error: "Failed to upsert categories", details: upsertError.message },
-      500
-    );
-  }
-  return c.json({ message: "Categories upserted successfully." });
 });
 
 export default eposNowTreatments;
