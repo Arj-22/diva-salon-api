@@ -82,5 +82,4 @@ eposNowCategories.post("/upsertCategories", async (c) => {
   }
   return c.json({ message: "Categories upserted successfully." });
 });
-
 export default eposNowCategories;

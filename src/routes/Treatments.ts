@@ -150,6 +150,56 @@ treatments.post("/", async (c) => {
   return c.json({ treatment: data }, 201);
 });
 
+treatments.post("/createForEposTreatments", async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+  const { data: eposTreatments, error: eposError } = await supabase
+    .from("EposNowTreatment")
+    .select("*");
+
+  if (eposError) {
+    return c.json({ error: eposError.message }, 500);
+  }
+
+  let createdCount = 0;
+
+  for (const eposTreatment of eposTreatments) {
+    const { data: existingTreatment } = await supabase
+      .from("Treatment")
+      .select("*")
+      .eq("eposNowTreatmentId", eposTreatment.Id)
+      .single();
+
+    if (existingTreatment) {
+      continue;
+    }
+
+    const { data: newTreatment, error: insertError } = await supabase
+      .from("Treatment")
+      .insert({
+        description: eposTreatment.Description,
+        eposNowTreatmentId: eposTreatment.EposNowId,
+        imageUrl: eposTreatment.ImageUrl ?? null,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error(
+        `Failed to create treatment for EposNowTreatment ID ${eposTreatment.Id}: ${insertError.message}`
+      );
+      continue;
+    }
+
+    createdCount++;
+  }
+
+  void cacheInvalidate("treatments:*").catch(() => {});
+  return c.json({
+    message: `Created ${createdCount} treatments for Epos Now treatments.`,
+  });
+});
+
 treatments.patch("/:id{[0-9]+}", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
