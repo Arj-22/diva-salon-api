@@ -30,7 +30,7 @@ eposNowCategories.get(
   }
 );
 
-eposNowCategories.post("/upsertCategories", async (c) => {
+eposNowCategories.post("/insertNewCategories", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
   // fetch properly and check status
@@ -50,13 +50,13 @@ eposNowCategories.post("/upsertCategories", async (c) => {
     );
   }
 
-  const categories = JSON.parse(await res.text());
+  const eposCategories = JSON.parse(await res.text());
 
-  if (!Array.isArray(categories) || categories.length === 0) {
+  if (!Array.isArray(eposCategories) || eposCategories.length === 0) {
     return c.json({ message: "No categories to upsert" });
   }
 
-  const flattened = flattenCategories(categories);
+  const flattened = flattenCategories(eposCategories);
 
   const payloads = flattened.map((cat) => ({
     CategoryIdEpos: cat.Id,
@@ -69,17 +69,47 @@ eposNowCategories.post("/upsertCategories", async (c) => {
     updated_at: new Date().toISOString(),
   }));
 
-  const { data: upserted, error: upsertError } = await supabase
+  const { data: categoryIds, error: categoryIdError } = await supabase
     .from("EposNowCategory")
-    .upsert(payloads)
-    .select();
+    .select("CategoryIdEpos");
 
-  if (upsertError) {
+  if (categoryIdError) {
     return c.json(
-      { error: "Failed to upsert categories", details: upsertError.message },
+      {
+        error: "Failed to fetch existing category IDs",
+        details: categoryIdError.message,
+      },
       500
     );
   }
-  return c.json({ message: "Categories upserted successfully." });
+
+  const categoryIdsList = categoryIds?.map((cat) => cat.CategoryIdEpos) || [];
+
+  const categoriesToInsert = payloads.filter(
+    (cat) => !categoryIdsList.includes(cat.CategoryIdEpos)
+  );
+
+  if (categoriesToInsert.length === 0) {
+    return c.json({ message: "No new categories to insert." });
+  }
+
+  if (categoriesToInsert.length > 0) {
+    const { data: upserted, error: upsertError } = await supabase
+      .from("EposNowCategory")
+      .upsert(categoriesToInsert)
+      .select();
+
+    if (upsertError) {
+      return c.json(
+        { error: "Failed to upsert categories", details: upsertError.message },
+        500
+      );
+    }
+    return c.json({
+      message: "Categories upserted successfully.",
+      categoriesAdded: upserted,
+    });
+  }
+  return c.json({ message: "No new categories to insert." });
 });
 export default eposNowCategories;

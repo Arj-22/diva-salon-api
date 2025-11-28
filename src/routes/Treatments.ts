@@ -34,6 +34,22 @@ treatments.get(
 );
 
 treatments.get(
+  "/active",
+  cacheResponse({ key: "treatments:active", ttlSeconds: 300 }),
+  async (c) => {
+    if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+    const { data, error } = await supabase
+      .from("Treatment")
+      .select(
+        `* ,EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax),  TreatmentCategory (name, description) ,TreatmentSubCategory (name, description)`
+      )
+      .eq("showOnWeb", true);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ treatments: data });
+  }
+);
+
+treatments.get(
   "/groupedByCategory",
   cacheResponse({ key: "treatments:groupedByCategory", ttlSeconds: 300 }),
   async (c) => {

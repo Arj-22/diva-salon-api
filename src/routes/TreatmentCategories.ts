@@ -36,6 +36,20 @@ treatmentCategories.get(
 );
 
 treatmentCategories.get(
+  "/active",
+  cacheResponse({ key: "treatmentCategories:active", ttlSeconds: 300 }),
+  async (c) => {
+    if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+    const { data, error } = await supabase
+      .from("TreatmentCategory")
+      .select(`*`)
+      .eq("showOnWeb", true);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ treatmentCategories: data });
+  }
+);
+
+treatmentCategories.get(
   "/:id{[0-9]+}",
   cacheResponse({
     key: (c) => `treatmentCategories:id:${c.req.param("id")}`,
@@ -54,32 +68,6 @@ treatmentCategories.get(
     return c.json({ treatmentCategory: data });
   }
 );
-
-// treatmentCategories.post("/assignToEposCategory", async (c) => {
-//   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
-//   const body = await c.req.json();
-
-//   const eposCategoryId = body.eposCategoryId;
-//   if (typeof eposCategoryId !== "number") {
-//     return c.json({ error: "Invalid eposCategoryId" }, 400);
-//   }
-
-//   const treatmentCategoryId = body.treatmentCategoryId;
-//   if (typeof treatmentCategoryId !== "number") {
-//     return c.json({ error: "Invalid treatmentCategoryId" }, 400);
-//   }
-
-//   const { data, error } = await supabase
-//     .from("TreatmentCategory")
-//     .update({ eposCategoryId })
-//     .eq("id", treatmentCategoryId)
-//     .select()
-//     .single();
-//   if (error) return c.json({ error: error.message }, 500);
-
-//   void cacheInvalidate("treatmentCategories:*").catch(() => {});
-//   return c.json({ treatmentCategory: data });
-// });
 
 treatmentCategories.post("/", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
