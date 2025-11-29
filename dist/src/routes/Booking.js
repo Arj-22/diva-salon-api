@@ -6,6 +6,7 @@ import { cacheResponse } from "../lib/cache-middleware.js";
 import { hcaptchaVerify } from "../lib/hcaptcha-middleware.js";
 import { sendEmail } from "../lib/mailer.js";
 import { bookingConfirmationTemplate } from "../../utils/emailTemplates/bookingConfirmation.js";
+import { parsePagination } from "../../utils/helpers.js";
 // import { sendMail } from "../lib/mailer.js";
 const bookings = new Hono();
 config({ path: ".env" });
@@ -172,25 +173,40 @@ bookings.post("/", hcaptchaVerify({ bodyField: "hcaptcha_token" }), validateBook
         },
     }, 201);
 });
-bookings.get("/", async (c) => {
+bookings.get("/", cacheResponse({
+    key: (c) => {
+        const page = Number(c.req.query("page") || 1);
+        const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+        return `bookings:all:page:${page}:per:${per}`;
+    },
+    ttlSeconds: 300,
+}), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
-    const { data, error } = await supabase
+    const { page, perPage, start, end } = parsePagination(c);
+    const { data, error, count } = await supabase
         .from("Booking")
-        .select(`id, message, created_at, Client (id, name, email, phoneNumber), Treatment_Booking (treatmentId)`)
-        .order("created_at", { ascending: false });
+        .select(`id, message, created_at, Client (id, name, email, phoneNumber), Treatment_Booking (treatmentId)`, { count: "exact" })
+        .order("created_at", { ascending: false })
+        .range(start, end);
     if (error) {
         return c.json({ error: "Failed to fetch bookings", details: error.message }, 500);
     }
+    const rows = Array.isArray(data) ? data : [];
+    const total = typeof count === "number" ? count : rows.length;
+    const totalPages = perPage > 0 ? Math.ceil(total / perPage) : 0;
     // Transform to include treatmentIds array
-    const bookings = data.map((booking) => ({
+    const bookingsList = rows.map((booking) => ({
         id: booking.id,
         message: booking.message,
         created_at: booking.created_at,
         client: booking.Client,
         treatmentIds: booking.Treatment_Booking.map((tb) => tb.treatmentId),
     }));
-    return c.json({ bookings });
+    return c.json({
+        bookings: bookingsList,
+        meta: { total, page, perPage, totalPages },
+    });
 });
 bookings.get("/byBookingId/:bookingId{[0-9]+}", cacheResponse({
     key: (c) => `bookings:bookingId:${c.req.param("bookingId")}`,
@@ -220,28 +236,40 @@ bookings.get("/byBookingId/:bookingId{[0-9]+}", cacheResponse({
     return c.json({ booking });
 });
 bookings.get("/byClientId/:clientId{[0-9]+}", cacheResponse({
-    key: (c) => `bookings:byClientId:${c.req.param("clientId")}`,
+    key: (c) => {
+        const page = Number(c.req.query("page") || 1);
+        const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+        return `bookings:byClientId:${c.req.param("clientId")}:page:${page}:per:${per}`;
+    },
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
     const clientId = Number(c.req.param("clientId"));
-    const { data, error } = await supabase
+    const { page, perPage, start, end } = parsePagination(c);
+    const { data, error, count } = await supabase
         .from("Booking")
-        .select(`*, Client(id, name, email, phoneNumber), Treatment_Booking (treatmentId)`)
+        .select(`*, Client(id, name, email, phoneNumber), Treatment_Booking (treatmentId)`, { count: "exact" })
         .eq("clientId", clientId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .range(start, end);
     if (error) {
         return c.json({ error: "Failed to fetch bookings", details: error.message }, 500);
     }
+    const rows = Array.isArray(data) ? data : [];
+    const total = typeof count === "number" ? count : rows.length;
+    const totalPages = perPage > 0 ? Math.ceil(total / perPage) : 0;
     // Transform to include treatmentIds array
-    const bookings = data.map((booking) => ({
+    const bookingsList = rows.map((booking) => ({
         id: booking.id,
         message: booking.message,
         created_at: booking.created_at,
         client: booking.Client,
         treatmentIds: booking.Treatment_Booking.map((tb) => tb.treatmentId),
     }));
-    return c.json({ bookings });
+    return c.json({
+        bookings: bookingsList,
+        meta: { total, page, perPage, totalPages },
+    });
 });
 export default bookings;

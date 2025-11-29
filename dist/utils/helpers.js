@@ -61,3 +61,11 @@ export function flattenCategories(categories) {
     }
     return flat;
 }
+export const parsePagination = (c) => {
+    const page = Math.max(1, Number(c.req.query("page") || 1));
+    const perPageRaw = Number(c.req.query("perPage") || c.req.query("per") || 21);
+    const perPage = Math.min(Math.max(1, perPageRaw || 21), 200);
+    const start = (page - 1) * perPage;
+    const end = start + perPage - 1;
+    return { page, perPage, start, end };
+};
