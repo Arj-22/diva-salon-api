@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { cacheResponse, cacheIdsViaAll } from "../lib/cache-middleware.js";
+import { cacheResponse } from "../lib/cache-middleware.js";
 import { flattenCategories } from "../../utils/helpers.js";
 
 const eposNowCategories = new Hono();
