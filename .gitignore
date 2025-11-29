@@ -26,3 +26,15 @@ lerna-debug.log*
 
 # misc
 .DS_Store
+
+compose.yaml
+
+# Docker / compose
+Dockerfile
+docker-compose.yml
+docker-compose.yaml
+docker-compose.*.yml
+.dockerignore
+docker/
+**/Dockerfile
+**/docker-compose*.yml
