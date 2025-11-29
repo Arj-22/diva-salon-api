@@ -21,6 +21,17 @@ treatments.get("/", cacheResponse({ key: "treatments:all", ttlSeconds: 300 }), a
         return c.json({ error: error.message }, 500);
     return c.json({ treatments: data });
 });
+treatments.get("/active", cacheResponse({ key: "treatments:active", ttlSeconds: 300 }), async (c) => {
+    if (!supabase)
+        return c.json({ error: "Supabase not configured" }, 500);
+    const { data, error } = await supabase
+        .from("Treatment")
+        .select(`* ,EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax),  TreatmentCategory (name, description) ,TreatmentSubCategory (name, description)`)
+        .eq("showOnWeb", true);
+    if (error)
+        return c.json({ error: error.message }, 500);
+    return c.json({ treatments: data });
+});
 treatments.get("/groupedByCategory", cacheResponse({ key: "treatments:groupedByCategory", ttlSeconds: 300 }), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
@@ -111,6 +122,49 @@ treatments.post("/", async (c) => {
         return c.json({ error: error.message }, 500);
     void cacheInvalidate("treatments:*").catch(() => { });
     return c.json({ treatment: data }, 201);
+});
+treatments.post("/createForEposTreatments", async (c) => {
+    if (!supabase)
+        return c.json({ error: "Supabase not configured" }, 500);
+    const { data: eposTreatments, error: eposError } = await supabase
+        .from("EposNowTreatment")
+        .select("*");
+    if (eposError) {
+        return c.json({ error: eposError.message }, 500);
+    }
+    let createdCount = 0;
+    // Fetch all existing eposNowTreatmentId values once
+    const { data: existingTreatments, error: existingError } = await supabase
+        .from("Treatment")
+        .select("eposNowTreatmentId");
+    if (existingError) {
+        return c.json({ error: existingError.message }, 500);
+    }
+    const existingIds = new Set((existingTreatments ?? []).map(t => t.eposNowTreatmentId));
+    for (const eposTreatment of eposTreatments) {
+        // Use EposNowId for comparison, as used in insert
+        if (existingIds.has(eposTreatment.EposNowId)) {
+            continue;
+        }
+        const { error: insertError } = await supabase
+            .from("Treatment")
+            .insert({
+            description: eposTreatment.Description,
+            eposNowTreatmentId: eposTreatment.EposNowId,
+            imageUrl: eposTreatment.ImageUrl ?? null,
+        })
+            .select()
+            .single();
+        if (insertError) {
+            console.error(`Failed to create treatment for EposNowTreatment ID ${eposTreatment.Id}: ${insertError.message}`);
+            continue;
+        }
+        createdCount++;
+    }
+    void cacheInvalidate("treatments:*").catch(() => { });
+    return c.json({
+        message: `Created ${createdCount} treatments for Epos Now treatments.`,
+    });
 });
 treatments.patch("/:id{[0-9]+}", async (c) => {
     if (!supabase)

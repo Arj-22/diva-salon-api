@@ -37,3 +37,27 @@ export function formatZodError(err) {
         issues: err.issues.map(serializeIssue),
     };
 }
+export function flattenCategories(categories) {
+    const flat = [];
+    const visit = (cat, parentId) => {
+        const self = {
+            Id: cat.Id,
+            ParentId: parentId ?? cat.ParentId ?? null,
+            RootParentId: cat.RootParentId ?? parentId ?? null,
+            Name: cat.Name,
+            Description: cat.Description ?? null,
+            ImageUrl: cat.ImageUrl ?? null,
+            ShowOnTill: Boolean(cat.ShowOnTill),
+        };
+        flat.push(self);
+        if (Array.isArray(cat.Children)) {
+            for (const child of cat.Children) {
+                visit(child, cat.Id);
+            }
+        }
+    };
+    for (const top of categories) {
+        visit(top, top.ParentId ?? null);
+    }
+    return flat;
+}

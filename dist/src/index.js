@@ -10,6 +10,7 @@ import { apiKeyAuth } from "./lib/api-key-auth-middleware.js";
 import bookings from "./routes/Booking.js";
 import clients from "./routes/Clients.js";
 import email from "./routes/sendMail.js";
+import eposNowCategories from "./routes/EposNowCategories.js";
 const app = new Hono();
 app.use("*", apiKeyAuth({
     // Configure via env API_KEYS="key1,key2"
@@ -17,6 +18,7 @@ app.use("*", apiKeyAuth({
     exclude: ["/health"], // remove this line to protect /health too
 }));
 app.route("/eposNowTreatments", eposNowTreatments);
+app.route("/eposNowCategories", eposNowCategories);
 app.route("/googleReviews", googleReviews);
 app.route("/treatmentCategories", treatmentCategories);
 app.route("/treatmentSubCategories", treatmentSubCategories);
