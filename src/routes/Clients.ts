@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { cacheResponse } from "../lib/cache-middleware.js";
+import { parsePagination } from "../../utils/helpers.js";
 
 const clients = new Hono();
 config({ path: ".env" });
@@ -18,12 +19,39 @@ const supabase =
 
 clients.get(
   "/",
-  cacheResponse({ key: "clients:all", ttlSeconds: 300 }),
+  cacheResponse({
+    key: (c) => {
+      const page = Number(c.req.query("page") || 1);
+      const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+      return `clients:all:page:${page}:per:${per}`;
+    },
+    ttlSeconds: 300,
+  }),
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
-    const { data, error } = await supabase.from("Client").select(`*`);
+
+    const { page, perPage, start, end } = parsePagination(c);
+
+    const { data, error, count } = await supabase
+      .from("Client")
+      .select("*", { count: "exact" })
+      .range(start, end);
+
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ clients: data });
+
+    const items = Array.isArray(data) ? data : [];
+    const total = typeof count === "number" ? count : items.length;
+    const totalPages = perPage > 0 ? Math.ceil(total / perPage) : 0;
+
+    return c.json({
+      clients: items,
+      meta: {
+        total,
+        page,
+        perPage,
+        totalPages,
+      },
+    });
   }
 );
 
