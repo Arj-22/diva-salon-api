@@ -113,6 +113,9 @@ eposNowTreatments.get("/getEposProducts", async (c) => {
 
 eposNowTreatments.post("insertTreatmentsByEposCategory", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+  if (!EPOS_NOW_URL) {
+    return c.json({ error: "EPOS_NOW_URL not configured" }, 500);
+  }
 
   const body = await c.req.json();
 
