@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { cacheResponse } from "../lib/cache-middleware.js";
-import { flattenCategories } from "../../utils/helpers.js";
+import { flattenCategories, parsePagination } from "../../utils/helpers.js";
 
 const eposNowCategories = new Hono();
 config({ path: ".env" });
@@ -21,12 +21,38 @@ const EPOS_NOW_URL = process.env.EPOS_NOW_URL;
 
 eposNowCategories.get(
   "/",
-  cacheResponse({ key: "eposNowCategories:all", ttlSeconds: 300 }),
+  cacheResponse({
+    key: (c) => {
+      const page = Number(c.req.query("page") || 1);
+      const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+      return `eposNowCategories:page:${page}:per:${per}`;
+    },
+    ttlSeconds: 300,
+  }),
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
-    const { data, error } = await supabase.from("EposNowCategory").select(`*`);
+
+    const { page, perPage, start, end } = parsePagination(c);
+    const { data, error, count } = await supabase
+      .from("EposNowCategory")
+      .select("*", { count: "exact" })
+      .range(start, end);
+
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ eposNowCategories: data });
+
+    const items = Array.isArray(data) ? data : [];
+    const total = typeof count === "number" ? count : items.length;
+    const totalPages = perPage > 0 ? Math.ceil(total / perPage) : 0;
+
+    return c.json({
+      eposNowCategories: items,
+      meta: {
+        total,
+        page,
+        perPage,
+        totalPages,
+      },
+    });
   }
 );
 

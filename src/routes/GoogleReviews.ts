@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { cacheResponse, cacheInvalidate } from "../lib/cache-middleware.js";
 import { rateLimit } from "../lib/rate-limit-middleware.js";
+import { parsePagination } from "../../utils/helpers.js";
 
 const googleReviews = new Hono();
 config({ path: ".env" });
@@ -22,19 +23,81 @@ const placeId = process.env.DIVA_SALON_GOOGLE_PLACE_ID;
 
 googleReviews.get(
   "/",
-  cacheResponse({ key: "googleReviews:all", ttlSeconds: 300 }),
+  cacheResponse({
+    key: (c) => {
+      const page = Number(c.req.query("page") || 1);
+      const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+      const min = c.req.query("minRating") || c.req.query("min") || "";
+      const from = c.req.query("dateFrom") || c.req.query("from") || "";
+      const to = c.req.query("dateTo") || c.req.query("to") || "";
+      return `googleReviews:page:${page}:per:${per}:min:${min}:from:${from}:to:${to}`;
+    },
+    ttlSeconds: 300,
+  }),
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
-    const { data, error } = await supabase
-      .from("GooglePlaceReview")
-      .select(
-        `
+
+    const { page, perPage, start, end } = parsePagination(c);
+    // parse optional minRating filter (1..5)
+    const minRaw = c.req.query("minRating") || c.req.query("min");
+    const minRating =
+      typeof minRaw === "string" && minRaw.trim() !== ""
+        ? Math.min(5, Math.max(1, Number(minRaw)))
+        : undefined;
+
+    // parse optional date range (accept ISO or yyyy-mm-dd). Use UTC ISO strings for query.
+    const dateFromRaw = (
+      c.req.query("dateFrom") ||
+      c.req.query("from") ||
+      ""
+    ).trim();
+    const dateToRaw = (c.req.query("dateTo") || c.req.query("to") || "").trim();
+
+    let dateFromIso: string | undefined;
+    let dateToIso: string | undefined;
+
+    if (dateFromRaw) {
+      const parsed = Date.parse(dateFromRaw);
+      if (Number.isNaN(parsed)) {
+        return c.json({ error: "Invalid dateFrom", value: dateFromRaw }, 400);
+      }
+      dateFromIso = new Date(parsed).toISOString();
+    }
+
+    if (dateToRaw) {
+      const parsed = Date.parse(dateToRaw);
+      if (Number.isNaN(parsed)) {
+        return c.json({ error: "Invalid dateTo", value: dateToRaw }, 400);
+      }
+      // If user supplies a date without time (e.g., 2025-11-29) they likely expect inclusive end of day.
+      // To be conservative we keep provided timestamp as-is. If you want end-of-day, adjust here.
+      dateToIso = new Date(parsed).toISOString();
+    }
+
+    let query = supabase.from("GooglePlaceReview").select(
+      `
           *,
           GoogleReviewText( text, languageCode ),
           GoogleAuthorAttribution ( uri, photoUri, displayName )
-        `
-      )
-      .order("publishTime", { ascending: false });
+        `,
+      { count: "exact" }
+    );
+
+    if (minRating !== undefined && !Number.isNaN(minRating)) {
+      query = query.gte("rating", minRating);
+    }
+
+    if (dateFromIso) {
+      query = query.gte("publishTime", dateFromIso);
+    }
+    if (dateToIso) {
+      query = query.lte("publishTime", dateToIso);
+    }
+
+    const { data, error, count } = await query
+      .order("publishTime", { ascending: false })
+      .range(start, end);
+
     if (error) return c.json({ error: error.message }, 500);
 
     const normalized = Array.isArray(data)
@@ -47,8 +110,23 @@ googleReviews.get(
             ? row.GoogleAuthorAttribution[0] ?? null
             : row.GoogleAuthorAttribution ?? null,
         }))
-      : data;
-    return c.json({ googleReviews: normalized });
+      : [];
+
+    const total = typeof count === "number" ? count : normalized.length;
+    const totalPages = perPage > 0 ? Math.ceil(total / perPage) : 0;
+
+    return c.json({
+      googleReviews: normalized,
+      meta: {
+        total,
+        page,
+        perPage,
+        totalPages,
+        minRating: minRating ?? null,
+        dateFrom: dateFromIso ?? null,
+        dateTo: dateToIso ?? null,
+      },
+    });
   }
 );
 

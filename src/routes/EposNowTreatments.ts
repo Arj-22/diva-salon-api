@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { cacheResponse, cacheIdsViaAll } from "../lib/cache-middleware.js";
+import { parsePagination } from "../../utils/helpers.js";
 
 const eposNowTreatments = new Hono();
 config({ path: ".env" });
@@ -21,12 +22,39 @@ const EPOS_NOW_URL = process.env.EPOS_NOW_URL;
 // GET / -> cache full payload at a stable key
 eposNowTreatments.get(
   "/",
-  cacheResponse({ key: "eposNowTreatments:all", ttlSeconds: 300 }),
+  cacheResponse({
+    key: (c) => {
+      const page = Number(c.req.query("page") || 1);
+      const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+      return `eposNowTreatments:page:${page}:per:${per}`;
+    },
+    ttlSeconds: 300,
+  }),
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
-    const { data, error } = await supabase.from("EposNowTreatment").select("*");
+
+    const { page, perPage, start, end } = parsePagination(c);
+
+    const { data, error, count } = await supabase
+      .from("EposNowTreatment")
+      .select("*", { count: "exact" })
+      .range(start, end);
+
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ eposNowTreatments: data });
+
+    const eposNowTreatments = Array.isArray(data) ? data : [];
+    const total = typeof count === "number" ? count : eposNowTreatments.length;
+    const totalPages = perPage > 0 ? Math.ceil(total / perPage) : 0;
+
+    return c.json({
+      eposNowTreatments,
+      meta: {
+        total,
+        page,
+        perPage,
+        totalPages,
+      },
+    });
   }
 );
 
@@ -34,12 +62,18 @@ eposNowTreatments.get(
 eposNowTreatments.get(
   "/byCategory",
   cacheIdsViaAll({
-    key: (c) => `eposNowTreatments:byCategory:${c.req.query("category")}`,
+    key: (c) => {
+      const page = Number(c.req.query("page") || 1);
+      const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+      return `eposNowTreatments:byCategory:${c.req.query(
+        "category"
+      )}:page:${page}:per:${per}`;
+    },
     allKey: "eposNowTreatments:all",
     ttlSeconds: 120,
     // On hit, build the same response shape as the handler
     responseFromResolved: (c, resolved) => ({
-      category: c.req.query("category"),
+      category: c.req.query("categoryId"),
       items: resolved,
     }),
     // On miss, extract IDs from the handler's response
@@ -52,17 +86,32 @@ eposNowTreatments.get(
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
     const category = c.req.query("category");
-    const limit = Number(c.req.query("limit") ?? 50);
     if (!category) return c.json({ error: "category is required" }, 400);
 
-    const { data, error } = await supabase
+    const { page, perPage, start, end } = parsePagination(c);
+
+    const { data, error, count } = await supabase
       .from("EposNowTreatment")
-      .select("*")
-      .eq("CategoryId", category)
-      .limit(limit);
+      .select("*", { count: "exact" })
+      .eq("EposCategoryId", category)
+      .range(start, end);
 
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ category, items: data });
+
+    const items = Array.isArray(data) ? data : [];
+    const total = typeof count === "number" ? count : items.length;
+    const totalPages = perPage > 0 ? Math.ceil(total / perPage) : 0;
+
+    return c.json({
+      category,
+      items,
+      meta: {
+        total,
+        page,
+        perPage,
+        totalPages,
+      },
+    });
   }
 );
 
@@ -108,7 +157,31 @@ eposNowTreatments.get("/getEposProducts", async (c) => {
   }
 
   const text = await res.text();
-  return c.json({ data: text });
+  let products: any[] = [];
+  try {
+    products = JSON.parse(text);
+  } catch (err) {
+    return c.json(
+      { error: "Failed to parse Epos Now response", details: String(err) },
+      500
+    );
+  }
+
+  // pagination params for external product list
+  const { page, perPage, start, end } = parsePagination(c);
+  const total = products.length;
+  const totalPages = perPage > 0 ? Math.ceil(total / perPage) : 0;
+  const paged = products.slice(start, end + 1);
+
+  return c.json({
+    data: paged,
+    meta: {
+      total,
+      page,
+      perPage,
+      totalPages,
+    },
+  });
 });
 
 eposNowTreatments.post("insertTreatmentsByEposCategory", async (c) => {
