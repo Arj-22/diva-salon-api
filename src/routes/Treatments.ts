@@ -198,7 +198,7 @@ treatments.post("/createForEposTreatments", async (c) => {
       continue;
     }
 
-    const { data: newTreatment, error: insertError } = await supabase
+    const { error: insertError } = await supabase
       .from("Treatment")
       .insert({
         description: eposTreatment.Description,
