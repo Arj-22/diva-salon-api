@@ -93,23 +93,20 @@ eposNowCategories.post("/insertNewCategories", async (c) => {
     return c.json({ message: "No new categories to insert." });
   }
 
-  if (categoriesToInsert.length > 0) {
-    const { data: upserted, error: upsertError } = await supabase
-      .from("EposNowCategory")
-      .upsert(categoriesToInsert)
-      .select();
+  const { data: upserted, error: upsertError } = await supabase
+    .from("EposNowCategory")
+    .upsert(categoriesToInsert)
+    .select();
 
-    if (upsertError) {
-      return c.json(
-        { error: "Failed to upsert categories", details: upsertError.message },
-        500
-      );
-    }
-    return c.json({
-      message: "Categories upserted successfully.",
-      categoriesAdded: upserted,
-    });
+  if (upsertError) {
+    return c.json(
+      { error: "Failed to upsert categories", details: upsertError.message },
+      500
+    );
   }
-  return c.json({ message: "No new categories to insert." });
+  return c.json({
+    message: "Categories upserted successfully.",
+    categoriesAdded: upserted,
+  });
 });
 export default eposNowCategories;
