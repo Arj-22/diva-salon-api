@@ -113,7 +113,7 @@ treatmentCategories.patch("/:id{[0-9]+}", async (c) => {
   });
 });
 
-treatmentCategories.post("/createCatsForEposCats", async (c) => {
+treatmentCategories.post("/createCategoriesForEposCategories", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
   const { data: eposCategories, error: eposError } = await supabase
     .from("EposNowCategory")
