@@ -8,6 +8,8 @@ export const TreatmentCategorySchema = z.object({
   description: z.preprocess(emptyToUndefined, z.string().optional()),
   imageUrl: z.preprocess(emptyToUndefined, z.string().optional()),
   href: z.preprocess(emptyToUndefined, SlugSchema.optional()),
+  eposNowCategoryId: z.preprocess(emptyToUndefined, z.number().optional()),
+  showOnWeb: z.boolean().optional(),
   updated_at: z.preprocess(emptyToUndefined, z.string().optional()),
   created_at: z.preprocess(emptyToUndefined, z.string().optional()),
 });
@@ -27,6 +29,8 @@ export const TreatmentCategoryUpdateSchema = z.object({
   description: z.preprocess(emptyToUndefined, z.string().optional()),
   imageUrl: z.preprocess(emptyToUndefined, z.string().optional()),
   href: z.preprocess(emptyToUndefined, SlugSchema.optional()),
+  eposNowCategoryId: z.preprocess(emptyToUndefined, z.number().optional()),
+  showOnWeb: z.boolean().optional(),
 });
 
 export type TreatmentCategoryInsert = z.infer<

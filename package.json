@@ -1,6 +1,7 @@
 {
   "name": "diva-salon-api",
   "type": "module",
+  "version": "1.0.0",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",

@@ -1,9 +1,91 @@
-export type EposNowTreatment = {
+export type EposTaxRate = {
+  TaxGroupId: number;
+  TaxRateId: number;
+  LocationId: number;
+  Priority: number;
+  Percentage: number;
   Name: string;
-  CategoryId: string;
-  SalePriceExTax: number;
+  Description?: string | null;
+  TaxCode?: string | null;
+};
+
+export type EposTaxGroup = {
+  Id: number;
+  Name: string;
+  TaxRates: EposTaxRate[];
+};
+
+export type RawEposCategory = {
+  Id: number;
+  ParentId: number | null;
+  RootParentId: number | null;
+  Name: string;
+  Description?: string | null;
+  ImageUrl?: string | null;
+  ShowOnTill: boolean;
+  Children?: RawEposCategory[];
+};
+
+export type EposNowTreatment = {
+  Id: number;
+  Name: string;
+  Description?: string | null;
+  CostPrice: number;
+  IsCostPriceIncTax: boolean;
+  SalePrice: number;
+  IsSalePriceIncTax: boolean;
   SalePriceIncTax: number;
-  ButtonColourId: number | null;
+  EatOutPrice: number;
+  IsEatOutPriceIncTax: boolean;
+
+  // the Id of the category in Epos Now
+  CategoryIdEpos: number;
+
+  // The actual name of the category
+  CategoryId: string;
+
+  Barcode?: string | null;
+  SalePriceTaxGroupId?: number | null;
+  EatOutPriceTaxGroupId?: number | null;
+  CostPriceTaxGroupId?: number | null;
+  BrandId?: number | null;
+  SupplierId?: number | null;
+  PopupNoteId?: number | null;
+  UnitOfSale?: string | null;
+  VolumeOfSale?: number | null;
+  VariantGroupId?: number | null;
+  MultipleChoiceNoteId?: number | null;
+  Size?: string | null;
+  Sku?: string | null;
+  SellOnWeb: boolean;
+  SellOnTill: boolean;
+  OrderCode?: string | null;
+  SortPosition?: number | null;
+  RrPrice?: number | null;
+  ProductType?: number;
+  TareWeight?: number | null;
+  ArticleCode?: string | null;
+  IsTaxExemptable: boolean;
+  ReferenceCode?: string | null;
+  IsVariablePrice: boolean;
+  ExcludeFromLoyaltyPointsGain: boolean;
+  IsArchived: boolean;
+  ColourId?: number | null;
+  MeasurementDetails?: any | null;
+  Supplier?: any | null;
+  SalePriceTaxGroup?: EposTaxGroup | null;
+  EatOutPriceTaxGroup?: EposTaxGroup | null;
+  CostPriceTaxGroup?: EposTaxGroup | null;
+  ProductTags: any[];
+  ProductUdfs: any[];
+  AdditionalSuppliersIds: number[];
+  ProductLocationAreaPrices: any[];
+  ProductImages: any[];
+  IsMultipleChoiceProductOptional: boolean;
+  CustomerProductPricingDetails: any[];
+  ContainerFeeId?: number | null;
+  ButtonColourId?: number | null;
+  ProductDetails?: any | null;
 };
 /**
  * Text content for a Google review, with optional language code.
@@ -46,6 +128,20 @@ export type TreatmentCategory = {
   href?: string;
   updated_at?: string;
   created_at?: string;
+};
+
+export type EposNowCategory = {
+  Id: number;
+  ParentId?: number | null;
+  RootParentId?: number | null;
+  Name: string;
+  Description?: string | null;
+  ImageUrl?: string | null;
+  PopupNoteId?: number | null;
+  IsWet: boolean;
+  ShowOnTill: boolean;
+  ReferenceCode?: string | null;
+  PopupNote?: string | null;
 };
 
 // export type Treatment = {

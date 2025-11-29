@@ -36,6 +36,20 @@ treatmentCategories.get(
 );
 
 treatmentCategories.get(
+  "/active",
+  cacheResponse({ key: "treatmentCategories:active", ttlSeconds: 300 }),
+  async (c) => {
+    if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+    const { data, error } = await supabase
+      .from("TreatmentCategory")
+      .select(`*`)
+      .eq("showOnWeb", true);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ treatmentCategories: data });
+  }
+);
+
+treatmentCategories.get(
   "/:id{[0-9]+}",
   cacheResponse({
     key: (c) => `treatmentCategories:id:${c.req.param("id")}`,
@@ -96,6 +110,60 @@ treatmentCategories.patch("/:id{[0-9]+}", async (c) => {
   return c.json({
     message: "Treatment category updated",
     treatmentCategory: data,
+  });
+});
+
+treatmentCategories.post("/createCategoriesForEposCategories", async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+  const { data: eposCategories, error: eposError } = await supabase
+    .from("EposNowCategory")
+    .select("*");
+
+  if (eposError) {
+    return c.json({ error: eposError.message }, 500);
+  }
+
+  if (!eposCategories || eposCategories.length === 0) {
+    return c.json({ message: "No Epos Now categories found." });
+  }
+
+  const createdCategories = [];
+  // Fetch all existing category IDs at once
+  const { data: existingCats, error: existingCatsError } = await supabase
+    .from("TreatmentCategory")
+    .select("eposNowCategoryId");
+  if (existingCatsError) {
+    return c.json({ error: existingCatsError.message }, 500);
+  }
+  const existingCatIds = new Set(existingCats?.map(c => c.eposNowCategoryId) || []);
+  // Filter categories that do not already exist
+  const categoriesToCreate = eposCategories.filter(
+    eposCat => !existingCatIds.has(eposCat.CategoryIdEpos)
+  );
+  for (const eposCat of categoriesToCreate) {
+    const { data: newCat, error: insertError } = await supabase
+      .from("TreatmentCategory")
+      .insert({
+        name: eposCat.Name,
+        description: eposCat.Description,
+        eposNowCategoryId: eposCat.CategoryIdEpos,
+        imageUrl: eposCat.ImageUrl,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      return c.json({ error: insertError.message }, 500);
+    }
+
+    createdCategories.push(newCat);
+  }
+
+  void cacheInvalidate("treatmentCategories:*").catch(() => {});
+  return c.json({
+    message: "Epos Now categories processed.",
+    createdCount: createdCategories.length,
+    createdCategories,
   });
 });
 
