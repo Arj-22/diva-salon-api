@@ -128,17 +128,19 @@ treatmentCategories.post("/createCatsForEposCats", async (c) => {
   }
 
   const createdCategories = [];
-  for (const eposCat of eposCategories) {
-    const { data: existingCat } = await supabase
-      .from("TreatmentCategory")
-      .select("*")
-      .eq("eposNowCategoryId", eposCat.CategoryIdEpos)
-      .single();
-
-    if (existingCat) {
-      continue; // Skip if already exists
-    }
-
+  // Fetch all existing category IDs at once
+  const { data: existingCats, error: existingCatsError } = await supabase
+    .from("TreatmentCategory")
+    .select("eposNowCategoryId");
+  if (existingCatsError) {
+    return c.json({ error: existingCatsError.message }, 500);
+  }
+  const existingCatIds = new Set(existingCats?.map(c => c.eposNowCategoryId) || []);
+  // Filter categories that do not already exist
+  const categoriesToCreate = eposCategories.filter(
+    eposCat => !existingCatIds.has(eposCat.CategoryIdEpos)
+  );
+  for (const eposCat of categoriesToCreate) {
     const { data: newCat, error: insertError } = await supabase
       .from("TreatmentCategory")
       .insert({
