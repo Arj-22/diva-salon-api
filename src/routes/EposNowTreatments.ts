@@ -73,7 +73,7 @@ eposNowTreatments.get(
     ttlSeconds: 120,
     // On hit, build the same response shape as the handler
     responseFromResolved: (c, resolved) => ({
-      category: c.req.query("categoryId"),
+      category: c.req.query("category"),
       items: resolved,
     }),
     // On miss, extract IDs from the handler's response
