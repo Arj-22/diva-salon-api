@@ -179,14 +179,22 @@ treatments.post("/createForEposTreatments", async (c) => {
 
   let createdCount = 0;
 
-  for (const eposTreatment of eposTreatments) {
-    const { data: existingTreatment } = await supabase
-      .from("Treatment")
-      .select("*")
-      .eq("eposNowTreatmentId", eposTreatment.Id)
-      .single();
+  // Fetch all existing eposNowTreatmentId values once
+  const { data: existingTreatments, error: existingError } = await supabase
+    .from("Treatment")
+    .select("eposNowTreatmentId");
 
-    if (existingTreatment) {
+  if (existingError) {
+    return c.json({ error: existingError.message }, 500);
+  }
+
+  const existingIds = new Set(
+    (existingTreatments ?? []).map(t => t.eposNowTreatmentId)
+  );
+
+  for (const eposTreatment of eposTreatments) {
+    // Use EposNowId for comparison, as used in insert
+    if (existingIds.has(eposTreatment.EposNowId)) {
       continue;
     }
 
