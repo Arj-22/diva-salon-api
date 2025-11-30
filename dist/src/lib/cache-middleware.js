@@ -137,3 +137,57 @@ export function cacheIdsViaAll(options) {
         await next();
     };
 }
+/**
+ * Helper for caching API keys.
+ * Stores a list of { keyId, hashedKey } objects in Redis.
+ * - Cache key: "apiKeys:list"
+ * - Each entry: { keyId: string, hashedKey: string }
+ * - TTL: configurable (default 1 day)
+ */
+const CACHE_KEY = "apiKeys:list";
+const DEFAULT_TTL = 86400; // 1 day
+/**
+ * Get the cached list of API keys.
+ */
+export async function getCachedApiKeys() {
+    const cached = await redisCache.get(CACHE_KEY);
+    if (Array.isArray(cached))
+        return cached;
+    return [];
+}
+/**
+ * Find a hashedKey by keyId in the cache.
+ */
+export async function getHashedKeyFromCache(keyId) {
+    const list = await getCachedApiKeys();
+    const found = list.find((item) => item.keyId === keyId);
+    return found ? found.hashedKey : null;
+}
+/**
+ * Add or update a key in the cache.
+ */
+export async function cacheApiKey(keyId, hashedKey, ttl = DEFAULT_TTL) {
+    const list = await getCachedApiKeys();
+    const idx = list.findIndex((item) => item.keyId === keyId);
+    if (idx >= 0) {
+        list[idx].hashedKey = hashedKey;
+    }
+    else {
+        list.push({ keyId, hashedKey });
+    }
+    await redisCache.set(CACHE_KEY, list, ttl);
+}
+/**
+ * Remove a key from the cache.
+ */
+export async function removeApiKeyFromCache(keyId) {
+    const list = await getCachedApiKeys();
+    const filtered = list.filter((item) => item.keyId !== keyId);
+    await redisCache.set(CACHE_KEY, filtered, DEFAULT_TTL);
+}
+/**
+ * Clear all cached API keys.
+ */
+export async function clearApiKeyCache() {
+    await redisCache.invalidatePattern(CACHE_KEY);
+}
