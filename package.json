@@ -11,6 +11,7 @@
     "@hono/node-server": "^1.19.6",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.81.1",
+    "argon2": "^0.44.0",
     "dotenv": "^17.2.3",
     "hono": "^4.10.4",
     "redis": "^5.9.0",

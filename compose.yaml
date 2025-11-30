@@ -13,7 +13,6 @@ services:
       # Remove CHOKIDAR vars in production; re-add only if you truly need file watching
       # CHOKIDAR_USEPOLLING: "0"
       # NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Avoid disabling TLS in prod
-      API_KEYS: test-key-1,test-key-2
     depends_on:
       - redis
     ports:
