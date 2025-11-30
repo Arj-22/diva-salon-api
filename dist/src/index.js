@@ -11,6 +11,7 @@ import bookings from "./routes/Booking.js";
 import clients from "./routes/Clients.js";
 import email from "./routes/sendMail.js";
 import eposNowCategories from "./routes/EposNowCategories.js";
+import apiKeys from "./routes/ApiKeys.js";
 const app = new Hono();
 app.use("*", apiKeyAuth({
     // Configure via env API_KEYS="key1,key2"
@@ -26,6 +27,7 @@ app.route("/treatments", treatments);
 app.route("/clients", clients);
 app.route("/bookings", bookings);
 app.route("/sendMail", email);
+app.route("/apiKeys", apiKeys);
 app.route("/health", health); // or just inline handler
 // app.get("/", (c) => {
 //   return c.text("Hello Hono!");

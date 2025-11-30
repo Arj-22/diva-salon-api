@@ -2,6 +2,7 @@ import crypto from "crypto";
 import argon2 from "argon2";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
+import { cacheApiKey, getHashedKeyFromCache } from "./cache-middleware.js";
 
 /**
  * Options for creating / hashing an API key.
@@ -188,6 +189,22 @@ export const verifyApiKey = async (apiKey: string) => {
     return { valid: false, error: "invalid_format" };
   }
 
+  const cachedHashedKey = await getHashedKeyFromCache(keyId);
+
+  if (cachedHashedKey) {
+    let ok = false;
+    try {
+      ok = await argon2.verify(cachedHashedKey, apiKey);
+    } catch (err) {
+      console.error("verifyApiKey (cache): argon2.verify error", err);
+      ok = false;
+    }
+
+    if (ok) {
+      return { valid: true };
+    }
+    // If cache verification failed, fall through to DB check
+  }
   const { data, error } = await supabase
     .from("ApiKeys")
     .select("hashedKey")
@@ -212,6 +229,10 @@ export const verifyApiKey = async (apiKey: string) => {
   if (!ok) {
     return { valid: false, error: "invalid_key" };
   }
+
+  cacheApiKey(keyId, hashedKey).catch((err) => {
+    console.error("cacheApiKey error:", err);
+  });
 
   return { valid: true };
 };
