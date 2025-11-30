@@ -1,32 +1,37 @@
 services:
   divasalonapi:
-    image: divasalonapi
     build:
       context: .
       dockerfile: ./Dockerfile
-    command: sh -c "npm install && npm run dev" # start the development server
+    image: divasalonapi
+    # Let Dockerfile CMD run (npm start). Remove dev watchers.
     env_file:
       - .env
     environment:
-      NODE_ENV: dev
+      NODE_ENV: production
       REDIS_URL: redis://redis:6379
-      CHOKIDAR_USEPOLLING: "1"
-      NODE_TLS_REJECT_UNAUTHORIZED: "0" # allow insecure TLS inside container
-      API_KEYS: test-key-1,test-key-2
+      # Remove CHOKIDAR vars in production; re-add only if you truly need file watching
+      # CHOKIDAR_USEPOLLING: "0"
+      # NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Avoid disabling TLS in prod
     depends_on:
       - redis
     ports:
-      - 3001:3001
-    volumes:
-      - .:/usr/src/app
-      - /usr/src/app/node_modules
+      - "3001:3001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
-    ports:
-      - "6379:6379"
     volumes:
       - redis-data:/data
+    restart: unless-stopped
+    # Keep Redis internal; don't publish 6379 on the host
 
 volumes:
   redis-data:

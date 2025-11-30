@@ -135,7 +135,6 @@ export const verifyApiKey = async (apiKey) => {
             ok = false;
         }
         if (ok) {
-            console.log("API key verified from cache for keyId:", keyId);
             return { valid: true };
         }
         // If cache verification failed, fall through to DB check
