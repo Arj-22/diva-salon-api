@@ -10,6 +10,7 @@ services:
     environment:
       NODE_ENV: production
       REDIS_URL: redis://redis:6379
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
       # Remove CHOKIDAR vars in production; re-add only if you truly need file watching
       # CHOKIDAR_USEPOLLING: "0"
       # NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Avoid disabling TLS in prod

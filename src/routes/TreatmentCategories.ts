@@ -117,6 +117,30 @@ treatmentCategories.get(
 );
 
 treatmentCategories.get(
+  "/activeSlugs",
+  cacheResponse({
+    key: () => `treatmentCategories:activeSlugs`,
+    ttlSeconds: 300,
+  }),
+  async (c) => {
+    if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+    const { data, error } = await supabase
+      .from("TreatmentCategory")
+      .select("href")
+      .eq("showOnWeb", true);
+
+    if (error) return c.json({ error: error.message }, 500);
+
+    const slugs = Array.isArray(data)
+      ? data.map((item) => item.href).filter((slug): slug is string => !!slug)
+      : [];
+
+    return c.json({ slugs });
+  }
+);
+
+treatmentCategories.get(
   "/:id{[0-9]+}",
   cacheResponse({
     key: (c) => `treatmentCategories:id:${c.req.param("id")}`,
