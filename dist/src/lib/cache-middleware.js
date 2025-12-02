@@ -34,8 +34,10 @@ export function cacheResponse(options = {}) {
         c.set("cache:ttl", ttlSeconds);
         c.json = ((data, status, headers) => {
             const dynamicSkip = Boolean(c.get("cache:skip"));
-            if (!skip && !dynamicSkip) {
-                // CacheManager.set handles JSON.stringify and TTL via SETEX
+            const statusCode = typeof status === "number" ? status : c.res?.status ?? 200;
+            const isError = statusCode >= 400 ||
+                (data && typeof data === "object" && "error" in data);
+            if (!skip && !dynamicSkip && !isError) {
                 void redisCache
                     .set(computedKey, data, ttlSeconds)
                     .catch((e) => console.error("Cache set error:", e));
@@ -44,6 +46,15 @@ export function cacheResponse(options = {}) {
         });
         await next();
     };
+}
+export function buildCacheKey(prefix, params) {
+    const entries = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== "");
+    if (entries.length === 0)
+        return `${prefix}:`;
+    const query = entries
+        .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
+        .join("&");
+    return `${prefix}:?${query}`;
 }
 export function setCacheKey(c, key) {
     c.set("cache:key", key);
@@ -119,7 +130,10 @@ export function cacheIdsViaAll(options) {
         const originalJson = c.json.bind(c);
         c.json = ((data, status, headers) => {
             const dynamicSkip = Boolean(c.get("cache:skip"));
-            if (!skip && !dynamicSkip) {
+            const statusCode = typeof status === "number" ? status : c.res?.status ?? 200;
+            const isError = statusCode >= 400 ||
+                (data && typeof data === "object" && "error" in data);
+            if (!skip && !dynamicSkip && !isError) {
                 try {
                     const ids = idsFromResponse(data);
                     if (Array.isArray(ids) && ids.length >= 0) {

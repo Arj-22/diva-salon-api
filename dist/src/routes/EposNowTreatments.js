@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { cacheResponse, cacheIdsViaAll } from "../lib/cache-middleware.js";
+import { cacheResponse, cacheIdsViaAll, buildCacheKey, } from "../lib/cache-middleware.js";
 import { parsePagination } from "../../utils/helpers.js";
 const eposNowTreatments = new Hono();
 config({ path: ".env" });
@@ -16,7 +16,10 @@ eposNowTreatments.get("/", cacheResponse({
     key: (c) => {
         const page = Number(c.req.query("page") || 1);
         const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
-        return `eposNowTreatments:page:${page}:per:${per}`;
+        return buildCacheKey("eposNowTreatments", {
+            page,
+            per,
+        });
     },
     ttlSeconds: 300,
 }), async (c) => {
@@ -90,7 +93,10 @@ eposNowTreatments.get("/byCategory", cacheIdsViaAll({
 });
 // Numeric id route (after specific routes)
 eposNowTreatments.get("/:id{[0-9]+}", cacheResponse({
-    key: (c) => `eposNowTreatments:id:${c.req.param("id")}`,
+    key: (c) => buildCacheKey("eposNowTreatments", {
+        route: "byId",
+        id: c.req.param("id"),
+    }),
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)

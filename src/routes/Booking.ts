@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { validateBooking } from "../lib/validation-middleware.js";
-import { cacheResponse } from "../lib/cache-middleware.js";
+import { buildCacheKey, cacheResponse } from "../lib/cache-middleware.js";
 import { hcaptchaVerify } from "../lib/hcaptcha-middleware.js";
 import { sendEmail } from "../lib/mailer.js";
 import { bookingConfirmationTemplate } from "../../utils/emailTemplates/bookingConfirmation.js";
@@ -239,7 +239,11 @@ bookings.get(
     key: (c) => {
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
-      return `bookings:all:page:${page}:per:${per}`;
+
+      return buildCacheKey("bookings", {
+        page,
+        per,
+      });
     },
     ttlSeconds: 300,
   }),
@@ -289,7 +293,11 @@ bookings.get(
 bookings.get(
   "/byBookingId/:bookingId{[0-9]+}",
   cacheResponse({
-    key: (c) => `bookings:bookingId:${c.req.param("bookingId")}`,
+    key: (c) =>
+      buildCacheKey("bookings", {
+        route: "byBookingId",
+        bookingId: c.req.param("bookingId"),
+      }),
     ttlSeconds: 300,
   }),
   async (c) => {
@@ -332,9 +340,13 @@ bookings.get(
     key: (c) => {
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
-      return `bookings:byClientId:${c.req.param(
-        "clientId"
-      )}:page:${page}:per:${per}`;
+
+      return buildCacheKey("bookings", {
+        route: "byClientId",
+        clientId: c.req.param("clientId"),
+        page,
+        per,
+      });
     },
     ttlSeconds: 300,
   }),
