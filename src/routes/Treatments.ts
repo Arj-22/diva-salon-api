@@ -1,7 +1,11 @@
 import { Hono, type Context } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { cacheInvalidate, cacheResponse } from "../lib/cache-middleware.js";
+import {
+  buildCacheKey,
+  cacheInvalidate,
+  cacheResponse,
+} from "../lib/cache-middleware.js";
 import { TreatmentInsertSchema } from "../../utils/schemas/TreatmentSchema.js";
 import { formatZodError, parsePagination } from "../../utils/helpers.js";
 
@@ -43,7 +47,11 @@ treatments.get(
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 21);
       const active = c.req.query("active") || "";
-      return `treatments:all:page:${page}:per:${per}:active:${active}`;
+      return buildCacheKey("treatments", {
+        page,
+        per,
+        active,
+      });
     },
     ttlSeconds: 300,
   }),
@@ -77,50 +85,17 @@ treatments.get(
 );
 
 treatments.get(
-  "/active",
-  cacheResponse({
-    key: (c) => {
-      const page = Number(c.req.query("page") || 1);
-      const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
-      return `treatments:active:page:${page}:per:${per}`;
-    },
-    ttlSeconds: 300,
-  }),
-  async (c) => {
-    if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
-
-    const { page, perPage, start, end } = parsePagination(c);
-
-    const { data, error, count } = await supabase
-      .from("Treatment")
-      .select(
-        `* ,EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax),  TreatmentCategory (name, description) ,TreatmentSubCategory (name, description)`,
-        { count: "exact" }
-      )
-      .eq("showOnWeb", true)
-      .range(start, end);
-
-    if (error) return c.json({ error: error.message }, 500);
-
-    const items = Array.isArray(data) ? data : [];
-    const total = typeof count === "number" ? count : items.length;
-    const totalPages = perPage > 0 ? Math.ceil(total / perPage) : 0;
-
-    return c.json({
-      treatments: items,
-      meta: { total, page, perPage, totalPages },
-    });
-  }
-);
-
-treatments.get(
   "/groupedByCategory",
   cacheResponse({
     key: (c) => {
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
       const catActive = c.req.query("categoryActive") || "";
-      return `treatments:groupedByCategory:page:${page}:per:${per}:cat:${catActive}`;
+      return buildCacheKey("treatments", {
+        page,
+        per,
+        catActive,
+      });
     },
     ttlSeconds: 300,
   }),
@@ -188,9 +163,12 @@ treatments.get(
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
       const catActive = c.req.query("categoryActive") || "";
-      return `treatments:byCategory:${c.req.param(
-        "treatmentCategoryId"
-      )}:page:${page}:per:${per}:cat:${catActive}`;
+      return buildCacheKey("treatments", {
+        treatmentCategoryId: c.req.param("treatmentCategoryId"),
+        page,
+        per,
+        catActive,
+      });
     },
     ttlSeconds: 300,
   }),
@@ -234,9 +212,12 @@ treatments.get(
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
       const active = c.req.query("active") || "";
-      return `treatments:categorySlug:${c.req.param(
-        "treatmentCategorySlug"
-      )}:page:${page}:per:${per}:active:${active}`;
+      return buildCacheKey("treatments", {
+        treatmentCategorySlug: c.req.param("treatmentCategorySlug"),
+        page,
+        per,
+        active,
+      });
     },
     ttlSeconds: 300,
   }),

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { cacheResponse } from "../lib/cache-middleware.js";
+import { buildCacheKey, cacheResponse } from "../lib/cache-middleware.js";
 import { parsePagination } from "../../utils/helpers.js";
 
 const clients = new Hono();
@@ -23,7 +23,10 @@ clients.get(
     key: (c) => {
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
-      return `clients:all:page:${page}:per:${per}`;
+      return buildCacheKey("clients", {
+        page,
+        per,
+      });
     },
     ttlSeconds: 300,
   }),
