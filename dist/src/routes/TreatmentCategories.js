@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { cacheInvalidate, cacheResponse } from "../lib/cache-middleware.js";
+import { buildCacheKey, cacheInvalidate, cacheResponse, } from "../lib/cache-middleware.js";
 import { TreatmentCategoryInsertSchema, TreatmentCategoryUpdateSchema, } from "../../utils/schemas/TreatmentCategorySchema.js";
 import { formatZodError, parsePagination } from "../../utils/helpers.js";
 const treatmentCategories = new Hono();
@@ -28,7 +28,11 @@ treatmentCategories.get("/", cacheResponse({
         const page = Number(c.req.query("page") || 1);
         const per = Number(c.req.query("perPage") || c.req.query("per") || 21);
         const active = c.req.query("active") || "";
-        return `treatmentCategories:page:${page}:per:${per}:active:${active}`;
+        return buildCacheKey("treatmentCategories", {
+            page,
+            per,
+            active,
+        });
     },
     ttlSeconds: 300,
 }), async (c) => {
@@ -58,57 +62,27 @@ treatmentCategories.get("/", cacheResponse({
         },
     });
 });
-// GET /active -> paginated + cached (kept for convenience)
-treatmentCategories.get("/active", cacheResponse({
-    key: (c) => {
-        const page = Number(c.req.query("page") || 1);
-        const per = Number(c.req.query("perPage") || c.req.query("per") || 21);
-        return `treatmentCategories:active:page:${page}:per:${per}`;
-    },
-    ttlSeconds: 300,
-}), async (c) => {
-    if (!supabase)
-        return c.json({ error: "Supabase not configured" }, 500);
-    const { page, perPage, start, end } = parsePagination(c);
-    const { data, error, count } = await supabase
-        .from("TreatmentCategory")
-        .select("*", { count: "exact" })
-        .eq("showOnWeb", true)
-        .range(start, end);
-    if (error)
-        return c.json({ error: error.message }, 500);
-    const items = Array.isArray(data) ? data : [];
-    const total = typeof count === "number" ? count : items.length;
-    const totalPages = perPage > 0 ? Math.ceil(total / perPage) : 0;
-    return c.json({
-        treatmentCategories: items,
-        meta: {
-            total,
-            page,
-            perPage,
-            totalPages,
-        },
-    });
-});
 treatmentCategories.get("/activeSlugs", cacheResponse({
-    key: () => `treatmentCategories:activeSlugs`,
+    key: () => buildCacheKey("activeSlugs", {}),
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
     const { data, error } = await supabase
         .from("TreatmentCategory")
-        .select("slug")
+        .select("href")
         .eq("showOnWeb", true);
     if (error)
         return c.json({ error: error.message }, 500);
     const slugs = Array.isArray(data)
-        ? data.map((item) => item.slug).filter((slug) => !!slug)
+        ? data.map((item) => item.href).filter((slug) => !!slug)
         : [];
     return c.json({ slugs });
 });
 treatmentCategories.get("/:id{[0-9]+}", cacheResponse({
-    key: (c) => `treatmentCategories:id:${c.req.param("id")}`,
+    key: (c) => buildCacheKey("treatmentCategories", {
+        id: c.req.param("id"),
+    }),
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)

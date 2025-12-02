@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { cacheResponse, cacheInvalidate } from "../lib/cache-middleware.js";
+import { cacheResponse, cacheInvalidate, buildCacheKey, } from "../lib/cache-middleware.js";
 import { rateLimit } from "../lib/rate-limit-middleware.js";
 import { parsePagination } from "../../utils/helpers.js";
 const googleReviews = new Hono();
@@ -20,7 +20,13 @@ googleReviews.get("/", cacheResponse({
         const min = c.req.query("minRating") || c.req.query("min") || "";
         const from = c.req.query("dateFrom") || c.req.query("from") || "";
         const to = c.req.query("dateTo") || c.req.query("to") || "";
-        return `googleReviews:page:${page}:per:${per}:min:${min}:from:${from}:to:${to}`;
+        return buildCacheKey("googleReviews", {
+            page,
+            per,
+            min,
+            from,
+            to,
+        });
     },
     ttlSeconds: 300,
 }), async (c) => {

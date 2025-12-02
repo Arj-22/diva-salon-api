@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { cacheInvalidate, cacheResponse } from "../lib/cache-middleware.js";
+import { buildCacheKey, cacheInvalidate, cacheResponse, } from "../lib/cache-middleware.js";
 import { TreatmentSubCategoryInsertSchema } from "../../utils/schemas/TreatmentSubCategorySchema.js";
 import { formatZodError, parsePagination } from "../../utils/helpers.js";
 const treatmentSubCategories = new Hono();
@@ -16,7 +16,10 @@ treatmentSubCategories.get("/", cacheResponse({
     key: (c) => {
         const page = Number(c.req.query("page") || 1);
         const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
-        return `treatmentSubCategories:page:${page}:per:${per}`;
+        return buildCacheKey("treatmentSubCategories", {
+            page,
+            per,
+        });
     },
     ttlSeconds: 300,
 }), async (c) => {
@@ -43,7 +46,9 @@ treatmentSubCategories.get("/", cacheResponse({
     });
 });
 treatmentSubCategories.get("/:id{[0-9]+}", cacheResponse({
-    key: (c) => `treatmentSubCategories:id:${c.req.param("id")}`,
+    key: (c) => buildCacheKey("treatmentSubCategories", {
+        id: c.req.param("id"),
+    }),
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)
