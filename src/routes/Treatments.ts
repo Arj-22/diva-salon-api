@@ -92,6 +92,7 @@ treatments.get(
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
       const catActive = c.req.query("categoryActive") || "";
       return buildCacheKey("treatments", {
+        route: "groupedByCategory",
         page,
         per,
         catActive,
@@ -164,6 +165,7 @@ treatments.get(
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
       const catActive = c.req.query("categoryActive") || "";
       return buildCacheKey("treatments", {
+        route: "byCategory",
         treatmentCategoryId: c.req.param("treatmentCategoryId"),
         page,
         per,
@@ -213,6 +215,7 @@ treatments.get(
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
       const active = c.req.query("active") || "";
       return buildCacheKey("treatments", {
+        route: "byCategorySlug",
         treatmentCategorySlug: c.req.param("treatmentCategorySlug"),
         page,
         per,

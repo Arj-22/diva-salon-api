@@ -128,6 +128,7 @@ eposNowTreatments.get(
   cacheResponse({
     key: (c) =>
       buildCacheKey("eposNowTreatments", {
+        route: "byId",
         id: c.req.param("id"),
       }),
     ttlSeconds: 300,

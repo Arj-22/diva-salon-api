@@ -63,7 +63,9 @@ treatmentCategories.get("/", cacheResponse({
     });
 });
 treatmentCategories.get("/activeSlugs", cacheResponse({
-    key: () => buildCacheKey("activeSlugs", {}),
+    key: () => buildCacheKey("treatmentCategories", {
+        route: "activeSlugs",
+    }),
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)
@@ -81,6 +83,7 @@ treatmentCategories.get("/activeSlugs", cacheResponse({
 });
 treatmentCategories.get("/:id{[0-9]+}", cacheResponse({
     key: (c) => buildCacheKey("treatmentCategories", {
+        route: "byId",
         id: c.req.param("id"),
     }),
     ttlSeconds: 300,

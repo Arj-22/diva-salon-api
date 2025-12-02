@@ -87,7 +87,10 @@ treatmentCategories.get(
 treatmentCategories.get(
   "/activeSlugs",
   cacheResponse({
-    key: () => buildCacheKey("activeSlugs", {}),
+    key: () =>
+      buildCacheKey("treatmentCategories", {
+        route: "activeSlugs",
+      }),
     ttlSeconds: 300,
   }),
   async (c) => {
@@ -113,6 +116,7 @@ treatmentCategories.get(
   cacheResponse({
     key: (c) =>
       buildCacheKey("treatmentCategories", {
+        route: "byId",
         id: c.req.param("id"),
       }),
     ttlSeconds: 300,

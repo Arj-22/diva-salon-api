@@ -295,6 +295,7 @@ bookings.get(
   cacheResponse({
     key: (c) =>
       buildCacheKey("bookings", {
+        route: "byBookingId",
         bookingId: c.req.param("bookingId"),
       }),
     ttlSeconds: 300,
@@ -341,6 +342,7 @@ bookings.get(
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
 
       return buildCacheKey("bookings", {
+        route: "byClientId",
         clientId: c.req.param("clientId"),
         page,
         per,

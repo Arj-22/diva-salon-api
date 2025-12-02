@@ -94,6 +94,7 @@ eposNowTreatments.get("/byCategory", cacheIdsViaAll({
 // Numeric id route (after specific routes)
 eposNowTreatments.get("/:id{[0-9]+}", cacheResponse({
     key: (c) => buildCacheKey("eposNowTreatments", {
+        route: "byId",
         id: c.req.param("id"),
     }),
     ttlSeconds: 300,

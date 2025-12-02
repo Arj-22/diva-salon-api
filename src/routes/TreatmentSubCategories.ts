@@ -69,6 +69,7 @@ treatmentSubCategories.get(
   cacheResponse({
     key: (c) =>
       buildCacheKey("treatmentSubCategories", {
+        route: "byId",
         id: c.req.param("id"),
       }),
     ttlSeconds: 300,

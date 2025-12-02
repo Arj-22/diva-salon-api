@@ -213,6 +213,7 @@ bookings.get("/", cacheResponse({
 });
 bookings.get("/byBookingId/:bookingId{[0-9]+}", cacheResponse({
     key: (c) => buildCacheKey("bookings", {
+        route: "byBookingId",
         bookingId: c.req.param("bookingId"),
     }),
     ttlSeconds: 300,
@@ -245,6 +246,7 @@ bookings.get("/byClientId/:clientId{[0-9]+}", cacheResponse({
         const page = Number(c.req.query("page") || 1);
         const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
         return buildCacheKey("bookings", {
+            route: "byClientId",
             clientId: c.req.param("clientId"),
             page,
             per,
