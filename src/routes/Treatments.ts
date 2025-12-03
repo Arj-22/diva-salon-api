@@ -84,6 +84,29 @@ treatments.get(
   }
 );
 
+treatments.get("/:id{[0-9]+}", async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+  const idParam = c.req.param("id");
+  const treatmentId = Number(idParam);
+  if (isNaN(treatmentId)) {
+    return c.json({ error: "Invalid ID" }, 400);
+  }
+
+  const { data, error } = await supabase
+    .from("Treatment")
+    .select(
+      `*, EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax), TreatmentCategory(name, description), TreatmentSubCategory(name, description)`
+    )
+    .eq("id", treatmentId)
+    .single();
+
+  if (error) return c.json({ error: error.message }, 500);
+  if (!data) return c.json({ error: "Treatment not found" }, 404);
+
+  return c.json({ treatment: data });
+});
+
 treatments.get(
   "/groupedByCategory",
   cacheResponse({
