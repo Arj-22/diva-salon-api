@@ -7,6 +7,7 @@ import {
 import { formatZodError } from "../../utils/helpers.js";
 import type z from "zod";
 import { getRedisClient } from "./redisClient.js";
+import { TreatmentBookingUpdateSchema } from "../../utils/schemas/TreatmentBookingSchema.js";
 
 export function validateBooking(schema: z.ZodTypeAny = BookingSchema) {
   return async (c: Context, next: Next) => {
@@ -29,6 +30,33 @@ export function validateBooking(schema: z.ZodTypeAny = BookingSchema) {
     }
 
     c.set("bookingData", parsed.data as BookingInput);
+    await next();
+  };
+}
+
+export function validateTreatmentBooking(
+  schema: z.ZodTypeAny = TreatmentBookingUpdateSchema
+) {
+  return async (c: Context, next: Next) => {
+    let body: any;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: "Validation failed",
+          details: formatZodError(parsed.error),
+        },
+        400
+      );
+    }
+
+    c.set("treatmentBookingData", parsed.data);
     await next();
   };
 }

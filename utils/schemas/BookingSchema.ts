@@ -11,3 +11,18 @@ export const BookingSchema = z
   })
   .strict();
 export type BookingInput = z.infer<typeof BookingSchema>;
+
+export const BookingInsertSchema = BookingSchema.extend({
+  treatmentIds: z
+    .array(z.coerce.number().int().positive())
+    .nonempty("Select at least one treatment"),
+  marketingOptIn: z.coerce.boolean().optional(),
+  preferredDate: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.string().datetime().optional()
+  ),
+});
+// .omit({
+//   hcaptcha_token: true, // handled separately server-side
+// })
+// .strict();

@@ -84,28 +84,51 @@ treatments.get(
   }
 );
 
-treatments.get("/:id{[0-9]+}", async (c) => {
-  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+treatments.get(
+  "/:id{[0-9,]+}",
+  cacheResponse({
+    key: (c) => {
+      return buildCacheKey("treatments", {
+        id: c.req.param("id"),
+      });
+    },
+    ttlSeconds: 300,
+  }),
+  async (c) => {
+    if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
-  const idParam = c.req.param("id");
-  const treatmentId = Number(idParam);
-  if (isNaN(treatmentId)) {
-    return c.json({ error: "Invalid ID" }, 400);
+    const raw = c.req.param("id");
+    const ids = raw
+      .split(",")
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isInteger(value) && value > 0);
+
+    if (ids.length === 0) {
+      return c.json({ error: "Invalid ID(s)" }, 400);
+    }
+
+    const uniqueIds = Array.from(new Set(ids));
+
+    const { data, error } = await supabase
+      .from("Treatment")
+      .select(
+        `*, EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax), TreatmentCategory(name, description), TreatmentSubCategory(name, description)`
+      )
+      .in("id", uniqueIds);
+
+    if (error) return c.json({ error: error.message }, 500);
+    if (!Array.isArray(data) || data.length === 0) {
+      return c.json({ error: "Treatment(s) not found" }, 404);
+    }
+
+    // Preserve original single-item shape for backward compatibility.
+    if (uniqueIds.length === 1) {
+      return c.json({ treatment: data[0] });
+    }
+
+    return c.json({ treatments: data, meta: { total: data.length } });
   }
-
-  const { data, error } = await supabase
-    .from("Treatment")
-    .select(
-      `*, EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax), TreatmentCategory(name, description), TreatmentSubCategory(name, description)`
-    )
-    .eq("id", treatmentId)
-    .single();
-
-  if (error) return c.json({ error: error.message }, 500);
-  if (!data) return c.json({ error: "Treatment not found" }, 404);
-
-  return c.json({ treatment: data });
-});
+);
 
 treatments.get(
   "/groupedByCategory",

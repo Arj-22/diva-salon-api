@@ -233,6 +233,37 @@ bookings.post(
   }
 );
 
+bookings.patch("/:id{[0-9]+}", validateBooking(), async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+  const bookingId = Number(c.req.param("id"));
+  const res = await c.req.json();
+  const updateData: any = {};
+
+  if (res.message !== undefined) {
+    updateData.message = res.message;
+  }
+  if (res.clientId !== undefined) {
+    updateData.clientId = res.clientId;
+  }
+
+  const { data: updatedBooking, error: updateError } = await supabase
+    .from("Booking")
+    .update(updateData)
+    .eq("id", bookingId)
+    .select("*")
+    .single();
+
+  if (updateError) {
+    return c.json(
+      { error: "Failed to update booking", details: updateError.message },
+      500
+    );
+  }
+
+  return c.json({ booking: updatedBooking });
+});
+
 bookings.get(
   "/",
   cacheResponse({
@@ -255,7 +286,7 @@ bookings.get(
     const { data, error, count } = await supabase
       .from("Booking")
       .select(
-        `id, message, created_at, Client (id, name, email, phoneNumber), Treatment_Booking (treatmentId)`,
+        `id, message, status, created_at, Client (id, name, email, phoneNumber), Treatment_Booking (treatmentId)`,
         { count: "exact" }
       )
       .order("created_at", { ascending: false })
@@ -276,6 +307,7 @@ bookings.get(
     const bookingsList = rows.map((booking) => ({
       id: booking.id,
       message: booking.message,
+      status: booking.status,
       created_at: booking.created_at,
       client: booking.Client,
       treatmentIds: booking.Treatment_Booking.map(
