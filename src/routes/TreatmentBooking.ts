@@ -29,10 +29,12 @@ treatmentBookings.get(
     key: (c) => {
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+      const status = c.req.query("status") || "";
 
       return buildCacheKey("treatmentBookings", {
         page,
         per,
+        status,
       });
     },
     ttlSeconds: 300,
@@ -40,6 +42,7 @@ treatmentBookings.get(
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
+    const status = c.req.query("status") || "";
     const { page, perPage, start, end } = parsePagination(c);
 
     const { data, error, count } = await supabase
@@ -49,6 +52,7 @@ treatmentBookings.get(
         `,
         { count: "exact" }
       )
+      .eq(status ? "status" : "", status || "")
       .order("created_at", { ascending: false })
       .range(start, end);
 
