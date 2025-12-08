@@ -172,7 +172,10 @@ treatmentBookings.patch(
       .from("Treatment_Booking")
       .update(payload)
       .eq("id", id)
-      .select()
+      .select(
+        `*, Treatment (EposNowTreatment(Name, SalePriceIncTax))
+        `
+      )
       .single();
 
     if (error) {
