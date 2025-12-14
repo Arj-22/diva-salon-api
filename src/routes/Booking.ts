@@ -2,7 +2,11 @@ import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { validateBooking } from "../lib/validation-middleware.js";
-import { buildCacheKey, cacheResponse } from "../lib/cache-middleware.js";
+import {
+  buildCacheKey,
+  cacheInvalidate,
+  cacheResponse,
+} from "../lib/cache-middleware.js";
 import { hcaptchaVerify } from "../lib/hcaptcha-middleware.js";
 import { sendEmail } from "../lib/mailer.js";
 import { bookingConfirmationTemplate } from "../../utils/emailTemplates/bookingConfirmation.js";
@@ -133,6 +137,7 @@ bookings.post(
       .single();
 
     if (bookingError || !bookingRow) {
+      console.error("Booking creation error:", bookingError);
       // Roll back newly created client if desired (best-effort)
       if (newClientCreated) {
         await supabase.from("Client").delete().eq("id", clientRow.id);
@@ -217,6 +222,7 @@ bookings.post(
       return c.json({ error: "Failed to send email" }, 500);
     }
 
+    cacheInvalidate("bookings:*");
     return c.json(
       {
         message: "Booking created",

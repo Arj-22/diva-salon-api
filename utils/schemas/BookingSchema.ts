@@ -7,6 +7,7 @@ export const BookingSchema = z
     phone: z.string().min(6).max(30).optional(),
     treatmentIds: z.array(z.coerce.number().int()),
     message: z.string().max(2000).optional(),
+    status: z.enum(["requested", "confirmed", "partial"]).optional(),
     hcaptcha_token: z.string().optional(),
   })
   .strict();
