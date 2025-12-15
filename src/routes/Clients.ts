@@ -58,4 +58,31 @@ clients.get(
   }
 );
 
+clients.get(
+  "/:id",
+  cacheResponse({
+    key: (c) => {
+      const id = c.req.param("id");
+      return buildCacheKey("clients", { id });
+    },
+    ttlSeconds: 300,
+  }),
+  async (c) => {
+    if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+    const id = c.req.param("id");
+
+    const { data, error } = await supabase
+      .from("Client")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) return c.json({ error: error.message }, 500);
+    if (!data) return c.json({ error: "Client not found" }, 404);
+
+    return c.json(data);
+  }
+);
+
 export default clients;
