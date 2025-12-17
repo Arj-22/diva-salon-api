@@ -59,6 +59,43 @@ clients.get(
 );
 
 clients.get(
+  "/by-ids",
+  cacheResponse({
+    key: (c) => {
+      const ids = c.req.query("ids") || "";
+      return buildCacheKey("clients", { byIds: ids });
+    },
+    ttlSeconds: 300,
+  }),
+  async (c) => {
+    if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+    const idsParam = c.req.query("ids");
+    if (!idsParam) {
+      return c.json({ error: "Missing 'ids' query parameter" }, 400);
+    }
+
+    const ids = idsParam
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+
+    if (ids.length === 0) {
+      return c.json({ error: "No valid IDs provided" }, 400);
+    }
+
+    const { data, error } = await supabase
+      .from("Client")
+      .select("*")
+      .in("id", ids);
+
+    if (error) return c.json({ error: error.message }, 500);
+
+    return c.json({ clients: data || [] });
+  }
+);
+
+clients.get(
   "/:id",
   cacheResponse({
     key: (c) => {

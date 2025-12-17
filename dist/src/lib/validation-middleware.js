@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { BookingSchema, } from "../../utils/schemas/BookingSchema.js";
 import { formatZodError } from "../../utils/helpers.js";
 import { getRedisClient } from "./redisClient.js";
+import { TreatmentBookingUpdateSchema } from "../../utils/schemas/TreatmentBookingSchema.js";
 export function validateBooking(schema = BookingSchema) {
     return async (c, next) => {
         let body;
@@ -19,6 +20,26 @@ export function validateBooking(schema = BookingSchema) {
             }, 400);
         }
         c.set("bookingData", parsed.data);
+        await next();
+    };
+}
+export function validateTreatmentBooking(schema = TreatmentBookingUpdateSchema) {
+    return async (c, next) => {
+        let body;
+        try {
+            body = await c.req.json();
+        }
+        catch {
+            return c.json({ error: "Invalid JSON body" }, 400);
+        }
+        const parsed = schema.safeParse(body);
+        if (!parsed.success) {
+            return c.json({
+                error: "Validation failed",
+                details: formatZodError(parsed.error),
+            }, 400);
+        }
+        c.set("treatmentBookingData", parsed.data);
         await next();
     };
 }

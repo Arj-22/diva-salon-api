@@ -52,6 +52,7 @@ export function buildCacheKey(prefix, params) {
     if (entries.length === 0)
         return `${prefix}:`;
     const query = entries
+        .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
         .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
         .join("&");
     return `${prefix}:?${query}`;

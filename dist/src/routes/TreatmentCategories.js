@@ -62,6 +62,17 @@ treatmentCategories.get("/", cacheResponse({
         },
     });
 });
+treatmentCategories.get("namesWithIds", async (c) => {
+    if (!supabase)
+        return c.json({ error: "Supabase not configured" }, 500);
+    const { data, error } = await supabase
+        .from("TreatmentCategory")
+        .select("id, name")
+        .order("name", { ascending: true });
+    if (error)
+        return c.json({ error: error.message }, 500);
+    return c.json({ treatmentCategories: data || [] });
+});
 treatmentCategories.get("/activeSlugs", cacheResponse({
     key: () => buildCacheKey("treatmentCategories", {
         route: "activeSlugs",

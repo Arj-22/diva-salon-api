@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { validateBooking } from "../lib/validation-middleware.js";
-import { buildCacheKey, cacheResponse } from "../lib/cache-middleware.js";
+import { buildCacheKey, cacheInvalidate, cacheResponse, } from "../lib/cache-middleware.js";
 import { hcaptchaVerify } from "../lib/hcaptcha-middleware.js";
 import { sendEmail } from "../lib/mailer.js";
 import { bookingConfirmationTemplate } from "../../utils/emailTemplates/bookingConfirmation.js";
@@ -97,6 +97,7 @@ bookings.post("/", hcaptchaVerify({ bodyField: "hcaptcha_token" }), validateBook
         .select("id,message,clientId")
         .single();
     if (bookingError || !bookingRow) {
+        console.error("Booking creation error:", bookingError);
         // Roll back newly created client if desired (best-effort)
         if (newClientCreated) {
             await supabase.from("Client").delete().eq("id", clientRow.id);
@@ -162,6 +163,7 @@ bookings.post("/", hcaptchaVerify({ bodyField: "hcaptcha_token" }), validateBook
         console.error("Error sending email:", err);
         return c.json({ error: "Failed to send email" }, 500);
     }
+    cacheInvalidate("bookings:*");
     return c.json({
         message: "Booking created",
         booking: {
@@ -172,6 +174,29 @@ bookings.post("/", hcaptchaVerify({ bodyField: "hcaptcha_token" }), validateBook
             newClient: newClientCreated,
         },
     }, 201);
+});
+bookings.patch("/:id{[0-9]+}", validateBooking(), async (c) => {
+    if (!supabase)
+        return c.json({ error: "Supabase not configured" }, 500);
+    const bookingId = Number(c.req.param("id"));
+    const res = await c.req.json();
+    const updateData = {};
+    if (res.message !== undefined) {
+        updateData.message = res.message;
+    }
+    if (res.clientId !== undefined) {
+        updateData.clientId = res.clientId;
+    }
+    const { data: updatedBooking, error: updateError } = await supabase
+        .from("Booking")
+        .update(updateData)
+        .eq("id", bookingId)
+        .select("*")
+        .single();
+    if (updateError) {
+        return c.json({ error: "Failed to update booking", details: updateError.message }, 500);
+    }
+    return c.json({ booking: updatedBooking });
 });
 bookings.get("/", cacheResponse({
     key: (c) => {
@@ -189,7 +214,7 @@ bookings.get("/", cacheResponse({
     const { page, perPage, start, end } = parsePagination(c);
     const { data, error, count } = await supabase
         .from("Booking")
-        .select(`id, message, created_at, Client (id, name, email, phoneNumber), Treatment_Booking (treatmentId)`, { count: "exact" })
+        .select(`id, message, clientId, status, created_at, Treatment_Booking (treatmentId)`, { count: "exact" })
         .order("created_at", { ascending: false })
         .range(start, end);
     if (error) {
@@ -202,8 +227,9 @@ bookings.get("/", cacheResponse({
     const bookingsList = rows.map((booking) => ({
         id: booking.id,
         message: booking.message,
+        clientId: booking.clientId,
+        status: booking.status,
         created_at: booking.created_at,
-        client: booking.Client,
         treatmentIds: booking.Treatment_Booking.map((tb) => tb.treatmentId),
     }));
     return c.json({

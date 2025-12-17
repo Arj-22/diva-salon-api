@@ -292,7 +292,7 @@ bookings.get(
     const { data, error, count } = await supabase
       .from("Booking")
       .select(
-        `id, message, status, created_at, Client (id, name, email, phoneNumber), Treatment_Booking (treatmentId)`,
+        `id, message, clientId, status, created_at, Treatment_Booking (treatmentId)`,
         { count: "exact" }
       )
       .order("created_at", { ascending: false })
@@ -313,9 +313,9 @@ bookings.get(
     const bookingsList = rows.map((booking) => ({
       id: booking.id,
       message: booking.message,
+      clientId: booking.clientId,
       status: booking.status,
       created_at: booking.created_at,
-      client: booking.Client,
       treatmentIds: booking.Treatment_Booking.map(
         (tb: { treatmentId: number }) => tb.treatmentId
       ),
