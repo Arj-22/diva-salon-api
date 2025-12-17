@@ -243,19 +243,24 @@ bookings.patch("/:id{[0-9]+}", validateBooking(), async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
   const bookingId = Number(c.req.param("id"));
-  const res = await c.req.json();
+  const body = await c.req.json();
   const updateData: any = {};
 
-  if (res.message !== undefined) {
-    updateData.message = res.message;
+  if (body.message !== undefined) {
+    updateData.message = body.message;
   }
-  if (res.clientId !== undefined) {
-    updateData.clientId = res.clientId;
+  if (body.clientId !== undefined) {
+    updateData.clientId = body.clientId;
   }
+
+  const payload = {
+    ...body,
+    updated_at: new Date().toISOString(),
+  };
 
   const { data: updatedBooking, error: updateError } = await supabase
     .from("Booking")
-    .update(updateData)
+    .update(payload)
     .eq("id", bookingId)
     .select("*")
     .single();
@@ -266,6 +271,7 @@ bookings.patch("/:id{[0-9]+}", validateBooking(), async (c) => {
       500
     );
   }
+  cacheInvalidate("bookings:*");
 
   return c.json({ booking: updatedBooking });
 });

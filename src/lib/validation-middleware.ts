@@ -1,7 +1,7 @@
 import type { Context, Next } from "hono";
 import crypto from "node:crypto";
 import {
-  BookingSchema,
+  BookingUpdateSchema,
   type BookingInput,
 } from "../../utils/schemas/BookingSchema.js";
 import { formatZodError } from "../../utils/helpers.js";
@@ -9,7 +9,7 @@ import type z from "zod";
 import { getRedisClient } from "./redisClient.js";
 import { TreatmentBookingUpdateSchema } from "../../utils/schemas/TreatmentBookingSchema.js";
 
-export function validateBooking(schema: z.ZodTypeAny = BookingSchema) {
+export function validateBooking(schema: z.ZodTypeAny = BookingUpdateSchema) {
   return async (c: Context, next: Next) => {
     let body: any;
     try {
