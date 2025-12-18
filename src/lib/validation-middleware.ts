@@ -8,6 +8,7 @@ import { formatZodError } from "../../utils/helpers.js";
 import type z from "zod";
 import { getRedisClient } from "./redisClient.js";
 import { TreatmentBookingUpdateSchema } from "../../utils/schemas/TreatmentBookingSchema.js";
+import { ClientUpdateSchema } from "../../utils/schemas/ClientSchema.js";
 
 export function validateBooking(schema: z.ZodTypeAny = BookingUpdateSchema) {
   return async (c: Context, next: Next) => {
@@ -84,6 +85,31 @@ export function duplicateSubmissionGuard(ttlSeconds = 300) {
     if (set !== "OK") {
       return c.json({ error: "Duplicate submission detected" }, 429);
     }
+    await next();
+  };
+}
+
+export function validateClient(schema: z.ZodTypeAny = ClientUpdateSchema) {
+  return async (c: Context, next: Next) => {
+    let body: any;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: "Validation failed",
+          details: formatZodError(parsed.error),
+        },
+        400
+      );
+    }
+
+    c.set("Client Data", parsed.data as z.infer<typeof ClientUpdateSchema>);
     await next();
   };
 }

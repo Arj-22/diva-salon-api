@@ -168,3 +168,9 @@ export type TreatmentSubCategory = {
   updated_at?: string | null;
   created_at: string; // ISO
 };
+
+export enum BookingStatus {
+  REQUESTED = "requested",
+  PARTIAL = "partial",
+  CONFIRMED = "confirmed",
+}

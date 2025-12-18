@@ -282,10 +282,12 @@ bookings.get(
     key: (c) => {
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+      const status = c.req.query("status") || "all";
 
       return buildCacheKey("bookings", {
         page,
         per,
+        status,
       });
     },
     ttlSeconds: 300,
@@ -294,8 +296,9 @@ bookings.get(
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
     const { page, perPage, start, end } = parsePagination(c);
+    const status = c.req.query("status") || "all";
 
-    const { data, error, count } = await supabase
+    const query = supabase
       .from("Booking")
       .select(
         `id, message, clientId, status, created_at, Treatment_Booking (treatmentId)`,
@@ -303,6 +306,11 @@ bookings.get(
       )
       .order("created_at", { ascending: false })
       .range(start, end);
+
+    if (status !== "all") {
+      query.eq("status", status);
+    }
+    const { data, error, count } = await query;
 
     if (error) {
       return c.json(

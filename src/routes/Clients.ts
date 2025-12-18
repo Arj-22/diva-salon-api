@@ -1,8 +1,13 @@
 import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { buildCacheKey, cacheResponse } from "../lib/cache-middleware.js";
+import {
+  buildCacheKey,
+  cacheInvalidate,
+  cacheResponse,
+} from "../lib/cache-middleware.js";
 import { parsePagination } from "../../utils/helpers.js";
+import { validateClient } from "../lib/validation-middleware.js";
 
 const clients = new Hono();
 config({ path: ".env" });
@@ -121,5 +126,67 @@ clients.get(
     return c.json(data);
   }
 );
+
+clients.post("/", async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+  const clientData = await c.req.json();
+
+  const { data, error } = await supabase
+    .from("Client")
+    .insert([clientData])
+    .select()
+    .single();
+
+  if (error) {
+    return c.json({ error: error.message }, { status: 500 });
+  }
+  if (!data) {
+    return c.json({ error: "Failed to create client" }, { status: 500 });
+  }
+  cacheInvalidate("clients:*");
+
+  return c.json(
+    {
+      message: "Client created successfully",
+      client: data,
+    },
+    { status: 201 }
+  );
+});
+
+clients.patch("/:id", validateClient(), async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+  const id = c.req.param("id");
+  const updateData = await c.req.json();
+
+  const { data, error } = await supabase
+    .from("Client")
+    .update({
+      ...updateData,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    return c.json({ error: error.message }, { status: 500 });
+  }
+  if (!data) {
+    return c.json({ error: "Failed to update client" }, { status: 500 });
+  }
+
+  cacheInvalidate("clients:*");
+
+  return c.json(
+    {
+      message: "Client updated successfully",
+      client: data,
+    },
+    { status: 200 }
+  );
+});
 
 export default clients;
