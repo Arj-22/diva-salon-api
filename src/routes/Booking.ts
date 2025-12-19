@@ -410,10 +410,9 @@ bookings.get(
 
     const { data, error, count } = await supabase
       .from("Booking")
-      .select(
-        `*, Client(id, name, email, phoneNumber), Treatment_Booking (treatmentId)`,
-        { count: "exact" }
-      )
+      .select(`*, clientId, Treatment_Booking (treatmentId)`, {
+        count: "exact",
+      })
       .eq("clientId", clientId)
       .order("created_at", { ascending: false })
       .range(start, end);
@@ -434,7 +433,7 @@ bookings.get(
       id: booking.id,
       message: booking.message,
       created_at: booking.created_at,
-      client: booking.Client,
+      clientId: booking.clientId,
       treatmentIds: booking.Treatment_Booking.map(
         (tb: { treatmentId: number }) => tb.treatmentId
       ),
