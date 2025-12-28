@@ -71,3 +71,22 @@ export const parsePagination = (c: any) => {
   const end = start + perPage - 1;
   return { page, perPage, start, end };
 };
+
+export function overlaps(
+  slotStart: Date,
+  slotEnd: Date,
+  bookingStart: Date,
+  bookingEnd: Date
+) {
+  return slotStart < bookingEnd && slotEnd > bookingStart;
+}
+
+export function combineDateAndTime(dateStr: string, timeStr: string) {
+  // Strip timezone if present (e.g. 10:00:00+00)
+  const cleanTime = timeStr.split("+")[0];
+
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const [hours, minutes, seconds = 0] = cleanTime.split(":").map(Number);
+
+  return new Date(year, month - 1, day, hours, minutes, seconds);
+}

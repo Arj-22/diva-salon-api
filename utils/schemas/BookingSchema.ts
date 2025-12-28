@@ -5,8 +5,15 @@ export const BookingSchema = z
     name: z.string().min(1),
     email: z.email(),
     phone: z.string().min(6).max(30).optional(),
-    treatmentIds: z.array(z.coerce.number().int()),
+    treatmentId: z.number().int().positive(),
     message: z.string().max(2000).optional(),
+    appointmentStartTime: z.string().refine((val) => !isNaN(Date.parse(val)), {
+      message: "Invalid start time",
+    }),
+    appointmentEndTime: z.string().refine((val) => !isNaN(Date.parse(val)), {
+      message: "Invalid end time",
+    }),
+    status: z.enum(["requested", "partial", "confirmed"]).optional(),
     hcaptcha_token: z.string().optional(),
   })
   .strict();

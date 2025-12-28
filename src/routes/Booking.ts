@@ -6,8 +6,12 @@ import { buildCacheKey, cacheResponse } from "../lib/cache-middleware.js";
 import { hcaptchaVerify } from "../lib/hcaptcha-middleware.js";
 import { sendEmail } from "../lib/mailer.js";
 import { bookingConfirmationTemplate } from "../../utils/emailTemplates/bookingConfirmation.js";
-import { parsePagination } from "../../utils/helpers.js";
-// import { sendMail } from "../lib/mailer.js";
+import {
+  combineDateAndTime,
+  overlaps,
+  parsePagination,
+} from "../../utils/helpers.js";
+import type { EposNowTreatment } from "../lib/types.js";
 
 const bookings = new Hono();
 config({ path: ".env" });
@@ -36,7 +40,9 @@ bookings.post(
       email: res.email,
       phone: res.phone,
       message: res.message,
-      treatmentIds: res.treatmentIds,
+      treatmentId: res.treatmentId,
+      appointmentStartTime: res.appointmentStartTime,
+      appointmentEndTime: res.appointmentEndTime,
     };
 
     // Find or create client
@@ -124,12 +130,17 @@ bookings.post(
     const bookingPayload = {
       message: bookingData.message || null,
       clientId: clientRow.id,
+      treatmentId: bookingData.treatmentId,
+      appointmentStartTime: bookingData.appointmentStartTime,
+      appointmentEndTime: bookingData.appointmentEndTime,
     };
 
     const { data: bookingRow, error: bookingError } = await supabase
       .from("Booking")
       .insert(bookingPayload)
-      .select("id,message,clientId")
+      .select(
+        "id,message,clientId,treatmentId, appointmentStartTime, appointmentEndTime, Treatment (*, EposNowTreatment(Name, SalePriceIncTax))"
+      )
       .single();
 
     if (bookingError || !bookingRow) {
@@ -143,64 +154,9 @@ bookings.post(
       );
     }
 
-    // 3. Link treatments
-    const treatmentIds = Array.isArray(bookingData.treatmentIds)
-      ? bookingData.treatmentIds
-      : [];
-    if (treatmentIds.length === 0) {
-      // Clean up booking (and possibly client) if no treatments
-      await supabase.from("Booking").delete().eq("id", bookingRow.id);
-      if (newClientCreated) {
-        await supabase.from("Client").delete().eq("id", clientRow.id);
-      }
-      return c.json({ error: "No treatmentIds provided" }, 400);
-    }
-
-    const treatmentBookingPayload = treatmentIds.map((tid: number) => ({
-      treatmentId: tid,
-      bookingId: bookingRow.id,
-    }));
-
-    const { error: tbError } = await supabase
-      .from("Treatment_Booking")
-      .insert(treatmentBookingPayload);
-
-    if (tbError) {
-      // Roll back booking and (optionally) client
-      await supabase.from("Booking").delete().eq("id", bookingRow.id);
-      if (newClientCreated) {
-        await supabase.from("Client").delete().eq("id", clientRow.id);
-      }
-      return c.json(
-        { error: "Failed to link treatments", details: tbError.message },
-        500
-      );
-    }
-
-    const { data: selectedTreatments, error: selectTreatmentsError } =
-      await supabase
-        .from("Treatment")
-        .select(`EposNowTreatment(*)`)
-        .in("id", treatmentIds);
-
-    if (selectTreatmentsError) {
-      console.error(
-        "Failed to fetch selected treatments:",
-        selectTreatmentsError
-      );
-
-      return c.json({ error: "Failed to fetch selected treatments" }, 500);
-    }
-
     // Ensure the template receives a single EposNowTreatment object per item.
-    const treatmentsForEmail = (selectedTreatments ?? [])
-      .map((t: any) => {
-        const epos = Array.isArray(t.EposNowTreatment)
-          ? t.EposNowTreatment[0]
-          : t.EposNowTreatment;
-        return epos ? { EposNowTreatment: epos } : null;
-      })
-      .filter(Boolean) as { EposNowTreatment: any }[];
+    // @ts-ignore
+    const treatment: EposNowTreatment = bookingRow.Treatment.EposNowTreatment;
 
     try {
       await sendEmail({
@@ -208,12 +164,13 @@ bookings.post(
         subject: "New Booking Created",
         html: bookingConfirmationTemplate({
           name: bookingData.name,
-          treatments: treatmentsForEmail,
+          treatment: treatment,
           message: bookingData.message,
         }),
       });
     } catch (err) {
       console.error("Error sending email:", err);
+      await supabase.from("Booking").delete().eq("id", bookingRow.id);
       return c.json({ error: "Failed to send email" }, 500);
     }
 
@@ -224,9 +181,12 @@ bookings.post(
           id: bookingRow.id,
           message: bookingRow.message,
           client: clientRow,
-          treatmentIds,
+          treatmentId: bookingRow.treatmentId,
+          appointmentStartTime: bookingRow.appointmentStartTime,
+          appointmentEndTime: bookingRow.appointmentEndTime,
           newClient: newClientCreated,
         },
+        // bookingRow,
       },
       201
     );
@@ -394,4 +354,104 @@ bookings.get(
     });
   }
 );
+
+bookings.get(
+  "/availability",
+  cacheResponse({
+    key: (c) => {
+      const treatmentId = c.req.query("treatmentId");
+      const date = c.req.query("date");
+      return buildCacheKey("bookings", {
+        route: "availability",
+        treatmentId,
+        date,
+      });
+    },
+    ttlSeconds: 60,
+  }),
+  async (c) => {
+    const treatmentId = c.req.query("treatmentId");
+    const date = c.req.query("date"); // YYYY-MM-DD
+
+    if (!treatmentId || !date) {
+      return c.json({ error: "Missing parameters" }, 400);
+    }
+
+    if (!supabase) {
+      return c.json({ error: "Supabase not configured" }, 500);
+    }
+
+    // 1️⃣ Get treatment duration
+    const { data: treatment } = await supabase
+      .from("Treatment")
+      .select("durationInMinutes")
+      .eq("id", treatmentId)
+      .eq("showOnWeb", true)
+      .single();
+
+    if (!treatment) {
+      return c.json({ error: "Treatment not found" }, 404);
+    }
+
+    const duration = treatment.durationInMinutes;
+
+    // 2️⃣ Get business hours
+    const dayOfWeek = new Date(date).getDay();
+
+    const { data: hours } = await supabase
+      .from("OpeningHours")
+      .select("opens_at, closes_at")
+      .eq("Day", dayOfWeek)
+      .single();
+
+    if (!hours) {
+      return c.json({ slots: [] });
+    }
+
+    const dayStart = combineDateAndTime(date, hours.opens_at);
+    const dayEnd = combineDateAndTime(date, hours.closes_at);
+
+    // 3️⃣ Fetch bookings
+    const { data: bookings } = await supabase
+      .from("Booking")
+      .select("appointmentStartTime, appointmentEndTime")
+      // .neq("status", "cancelled")
+      .gte("appointmentStartTime", dayStart.toISOString())
+      .lte("appointmentEndTime", dayEnd.toISOString());
+
+    // 4️⃣ Generate slots
+    const SLOT_STEP = duration;
+    const slots: string[] = [];
+
+    for (
+      let cursor = new Date(dayStart);
+      cursor.getTime() + duration * 60000 <= dayEnd.getTime();
+      cursor = new Date(cursor.getTime() + SLOT_STEP * 60000)
+    ) {
+      const slotStart = new Date(cursor);
+      const slotEnd = new Date(slotStart.getTime() + duration * 60000);
+
+      const conflict = bookings?.some((b) =>
+        overlaps(
+          slotStart,
+          slotEnd,
+          new Date(b.appointmentStartTime),
+          new Date(b.appointmentEndTime)
+        )
+      );
+
+      if (!conflict) {
+        slots.push(slotStart.toISOString().slice(11, 16));
+      }
+    }
+
+    return c.json({
+      date,
+      treatmentId: treatmentId,
+      durationInMinutes: duration,
+      slots,
+    });
+  }
+);
+
 export default bookings;
