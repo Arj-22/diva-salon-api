@@ -211,7 +211,7 @@ bookings.post(
       await supabase.from("Booking").delete().eq("id", bookingRow.id);
       return c.json({ error: "Failed to send email" }, 500);
     }
-    cacheInvalidate("bookings:*");
+    cacheInvalidate("bookings");
 
     return c.json(
       {
