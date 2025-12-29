@@ -2,7 +2,11 @@ import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { validateBooking } from "../lib/validation-middleware.js";
-import { buildCacheKey, cacheResponse } from "../lib/cache-middleware.js";
+import {
+  buildCacheKey,
+  cacheInvalidate,
+  cacheResponse,
+} from "../lib/cache-middleware.js";
 import { hcaptchaVerify } from "../lib/hcaptcha-middleware.js";
 import { sendEmail } from "../lib/mailer.js";
 import { bookingConfirmationTemplate } from "../../utils/emailTemplates/bookingConfirmation.js";
@@ -42,7 +46,6 @@ bookings.post(
       message: res.message,
       treatmentId: res.treatmentId,
       appointmentStartTime: res.appointmentStartTime,
-      appointmentEndTime: res.appointmentEndTime,
     };
 
     // Find or create client
@@ -126,13 +129,48 @@ bookings.post(
       newClientCreated = true;
     }
 
+    const appointmentStart = new Date(bookingData.appointmentStartTime);
+
+    const { data: conflictingBooking, error: conflictCheckError } =
+      await supabase
+        .from("Booking")
+        .select("id")
+        .eq("appointmentStartTime", bookingData.appointmentStartTime)
+        .maybeSingle();
+
+    if (conflictCheckError) {
+      return c.json(
+        {
+          error: "Failed to verify booking availability",
+          details: conflictCheckError.message,
+        },
+        500
+      );
+    }
+
+    if (conflictingBooking) {
+      return c.json(
+        { error: "This appointment start time is already booked" },
+        409
+      );
+    }
+
+    const treatmentDurationMinutes = await supabase
+      .from("Treatment")
+      .select("durationInMinutes")
+      .eq("id", bookingData.treatmentId)
+      .single();
+    const appointmentEndTime = new Date(
+      appointmentStart.getTime() +
+        treatmentDurationMinutes.data?.durationInMinutes * 60000
+    ).toISOString();
     // Define booking payload now with real clientId
     const bookingPayload = {
       message: bookingData.message || null,
       clientId: clientRow.id,
       treatmentId: bookingData.treatmentId,
       appointmentStartTime: bookingData.appointmentStartTime,
-      appointmentEndTime: bookingData.appointmentEndTime,
+      appointmentEndTime: appointmentEndTime,
     };
 
     const { data: bookingRow, error: bookingError } = await supabase
@@ -173,6 +211,7 @@ bookings.post(
       await supabase.from("Booking").delete().eq("id", bookingRow.id);
       return c.json({ error: "Failed to send email" }, 500);
     }
+    cacheInvalidate("bookings:*");
 
     return c.json(
       {
@@ -410,6 +449,8 @@ bookings.get(
 
     const dayStart = combineDateAndTime(date, hours.opens_at);
     const dayEnd = combineDateAndTime(date, hours.closes_at);
+    const now = new Date();
+    const isToday = date === now.toISOString().slice(0, 10);
 
     // 3️⃣ Fetch bookings
     const { data: bookings } = await supabase
@@ -430,6 +471,10 @@ bookings.get(
     ) {
       const slotStart = new Date(cursor);
       const slotEnd = new Date(slotStart.getTime() + duration * 60000);
+
+      if (isToday && slotStart <= now) {
+        continue;
+      }
 
       const conflict = bookings?.some((b) =>
         overlaps(

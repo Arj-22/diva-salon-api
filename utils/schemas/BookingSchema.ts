@@ -10,9 +10,12 @@ export const BookingSchema = z
     appointmentStartTime: z.string().refine((val) => !isNaN(Date.parse(val)), {
       message: "Invalid start time",
     }),
-    appointmentEndTime: z.string().refine((val) => !isNaN(Date.parse(val)), {
-      message: "Invalid end time",
-    }),
+    appointmentEndTime: z
+      .string()
+      .refine((val) => !isNaN(Date.parse(val)), {
+        message: "Invalid end time",
+      })
+      .optional(),
     status: z.enum(["requested", "partial", "confirmed"]).optional(),
     hcaptcha_token: z.string().optional(),
   })
