@@ -177,7 +177,7 @@ bookings.post(
       .from("Booking")
       .insert(bookingPayload)
       .select(
-        "id,message,clientId,treatmentId, appointmentStartTime, appointmentEndTime, Treatment (*, EposNowTreatment(Name, SalePriceIncTax))"
+        "id, message, clientId, treatmentId, appointmentStartTime, appointmentEndTime, Treatment (*, EposNowTreatment(Name, SalePriceIncTax))"
       )
       .single();
 
