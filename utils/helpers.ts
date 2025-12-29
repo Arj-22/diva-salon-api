@@ -86,7 +86,15 @@ export function combineDateAndTime(dateStr: string, timeStr: string) {
   const cleanTime = timeStr.split("+")[0];
 
   const [year, month, day] = dateStr.split("-").map(Number);
-  const [hours, minutes, seconds = 0] = cleanTime.split(":").map(Number);
 
+  // Parse time components more defensively to avoid non-numeric seconds (e.g. "10:00:00.123")
+  const [hoursStr = "0", minutesStr = "0", secondsStr = "0"] = cleanTime.split(":");
+
+  // Strip fractional seconds or trailing non-digits from the seconds component
+  const secondsMainPart = secondsStr.split(".")[0].replace(/[^0-9].*$/, "");
+
+  const hours = Number(hoursStr);
+  const minutes = Number(minutesStr);
+  const seconds = secondsMainPart === "" ? 0 : Number(secondsMainPart);
   return new Date(year, month - 1, day, hours, minutes, seconds);
 }
