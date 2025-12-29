@@ -225,7 +225,6 @@ bookings.post(
           appointmentEndTime: bookingRow.appointmentEndTime,
           newClient: newClientCreated,
         },
-        // bookingRow,
       },
       201
     );
