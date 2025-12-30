@@ -7,6 +7,7 @@ import {
   ClientSchema,
   type ClientInput,
 } from "../../utils/schemas/ClientSchema.js";
+import { validateClient } from "../lib/validation-middleware.js";
 
 const clients = new Hono();
 config({ path: ".env" });
@@ -21,7 +22,7 @@ const supabase =
     ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
     : null;
 
-clients.post("/", async (c) => {
+clients.post("/", validateClient(), async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
   let body: unknown;

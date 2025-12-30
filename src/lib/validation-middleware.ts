@@ -4,6 +4,10 @@ import {
   BookingSchema,
   type BookingInput,
 } from "../../utils/schemas/BookingSchema.js";
+import {
+  ClientSchema,
+  type ClientInput,
+} from "../../utils/schemas/ClientSchema.js";
 import { formatZodError } from "../../utils/helpers.js";
 import type z from "zod";
 import { getRedisClient } from "./redisClient.js";
@@ -29,6 +33,28 @@ export function validateBooking(schema: z.ZodTypeAny = BookingSchema) {
     }
 
     c.set("bookingData", parsed.data as BookingInput);
+    await next();
+  };
+}
+
+export function validateClient(schema: z.ZodTypeAny = ClientSchema) {
+  return async (c: Context, next: Next) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        { error: "Validation failed", details: formatZodError(parsed.error) },
+        400
+      );
+    }
+
+    c.set("clientData", parsed.data as ClientInput);
     await next();
   };
 }
