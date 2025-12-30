@@ -11,6 +11,7 @@ export const BookingSchema = z
       message: "Invalid start time",
     }),
     status: z.enum(["requested", "partial", "confirmed"]).optional(),
+    staffId: z.number().int().positive().optional(),
     hcaptcha_token: z.string().optional(),
   })
   .strict();
