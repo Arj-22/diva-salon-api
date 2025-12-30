@@ -106,10 +106,6 @@ formSubmissions.post(
       .single();
 
     if (formSubmissionError || !submissionRow) {
-      if (newClientCreated) {
-        await supabase.from("Client").delete().eq("id", clientRow.id);
-      }
-
       return c.json(
         {
           error: "Failed to save form submission",
