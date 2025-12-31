@@ -90,8 +90,8 @@ export function combineDateAndTime(dateStr: string, timeStr: string) {
   // Parse time components more defensively to avoid non-numeric seconds (e.g. "10:00:00.123")
   const [hoursStr = "0", minutesStr = "0", secondsStr = "0"] = cleanTime.split(":");
 
-  // Strip fractional seconds or trailing non-digits from the seconds component
-  const secondsMainPart = secondsStr.split(".")[0].replace(/[^0-9].*$/, "");
+  // Strip fractional seconds and any non-digits from the seconds component while preserving leading digits
+  const secondsMainPart = secondsStr.split(".")[0].replace(/[^0-9]/g, "");
 
   const hours = Number(hoursStr);
   const minutes = Number(minutesStr);
