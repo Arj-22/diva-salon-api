@@ -16,6 +16,11 @@ export const FormSubmissionSchema = ClientSchema.extend({
         message: "Email or phone number is required",
         path: ["email"],
       });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Email or phone number is required",
+        path: ["phoneNumber"],
+      });
     }
   })
   .strict();
