@@ -460,13 +460,12 @@ bookings.get(
       .lte("appointmentEndTime", dayEnd.toISOString());
 
     // 4️⃣ Generate slots
-    const SLOT_STEP = duration;
     const slots: string[] = [];
 
     for (
       let cursor = new Date(dayStart);
       cursor.getTime() + duration * 60000 <= dayEnd.getTime();
-      cursor = new Date(cursor.getTime() + SLOT_STEP * 60000)
+      cursor = new Date(cursor.getTime() + duration * 60000)
     ) {
       const slotStart = new Date(cursor);
       const slotEnd = new Date(slotStart.getTime() + duration * 60000);
