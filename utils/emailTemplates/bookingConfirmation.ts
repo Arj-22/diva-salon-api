@@ -2,20 +2,9 @@ import type { EposNowTreatment } from "../../src/lib/types.js";
 
 export function bookingConfirmationTemplate(opts: {
   name: string;
-  treatments: {
-    EposNowTreatment: EposNowTreatment;
-  }[];
+  treatment: EposNowTreatment;
   message?: string;
 }) {
-  const items = opts.treatments
-    .map(
-      (treatment) =>
-        `<li>${
-          treatment.EposNowTreatment.Name
-        } - £${treatment.EposNowTreatment.SalePriceIncTax.toFixed(2)}</li>`
-    )
-    .join("");
-
   return `
 <table width="100%" cellpadding="0" cellspacing="0" style="font-family: Arial, sans-serif; background:#f7f7f8; padding:24px;">
   <tr>
@@ -28,9 +17,11 @@ export function bookingConfirmationTemplate(opts: {
         <tr>
           <td style="padding-top:24px;">
             <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #ececec; border-radius:10px;">
-              <tr><td style="padding:16px 20px; font-size:14px; font-weight:600; color:#222;">Requested treatments</td></tr>
+              <tr><td style="padding:16px 20px; font-size:14px; font-weight:600; color:#222;">Requested treatment</td></tr>
               <tr><td style="padding:0 20px 20px 20px;">
-                <ul style="margin:0; padding-left:18px; color:#444; font-size:14px; line-height:1.6;">${items}</ul>
+                <ul style="margin:0; padding-left:18px; color:#444; font-size:14px; line-height:1.6;">
+                  <li>${opts.treatment.Name} - £${opts.treatment.SalePriceIncTax.toFixed(2)}</li>
+                </ul>
               </td></tr>
               <tr>      ${
                 opts.message
