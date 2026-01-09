@@ -231,16 +231,42 @@ bookings.post(
   }
 );
 
+bookings.patch("/:bookingId{[0-9]+}", async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+  const id = Number(c.req.param("bookingId"));
+  const updateData = await c.req.json();
+
+  const { data: updatedBooking, error } = await supabase
+    .from("Booking")
+    .update(updateData)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) {
+    return c.json(
+      { error: "Failed to update booking", details: error.message },
+      500
+    );
+  }
+
+  cacheInvalidate("bookings");
+
+  return c.json({ message: "Booking updated", booking: updatedBooking });
+});
+
 bookings.get(
   "/",
   cacheResponse({
     key: (c) => {
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+      const status = c.req.query("status");
 
       return buildCacheKey("bookings", {
         page,
         per,
+        status,
       });
     },
     ttlSeconds: 300,
@@ -248,17 +274,20 @@ bookings.get(
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
+    const status = c.req.query("status");
     const { page, perPage, start, end } = parsePagination(c);
 
-    const { data, error, count } = await supabase
+    let query = supabase
       .from("Booking")
-      .select(
-        // `id, message, created_at, Client (id, name, email, phoneNumber), Treatment_Booking (treatmentId)`,
-        `*, Client(id, name, email, phoneNumber)`,
-        { count: "exact" }
-      )
+      .select(`*, Client(id, name, email, phoneNumber)`, { count: "exact" })
       .order("created_at", { ascending: false })
       .range(start, end);
+
+    if (status) {
+      query = query.eq("status", status);
+    }
+
+    const { data, error, count } = await query;
 
     if (error) {
       return c.json(
@@ -306,7 +335,7 @@ bookings.get(
     const { data, error } = await supabase
       .from("Booking")
       .select(
-        `id, message, created_at, Client (id, name, email, phoneNumber), Treatment_Booking (treatmentId)`
+        `id, message, created_at, status, Client (id, name, email, phoneNumber), Treatment(*, EposNowTreatment(Name, SalePriceIncTax)) `
       )
       .eq("id", id)
       .single();
@@ -327,7 +356,7 @@ bookings.get(
       message: data.message,
       created_at: data.created_at,
       client: data.Client,
-      treatmentIds: data.Treatment_Booking.map((tb) => tb.treatmentId),
+      treatment: data.Treatment,
     };
 
     return c.json({ booking });
