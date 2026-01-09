@@ -12,19 +12,12 @@ import clients from "./routes/Clients.js";
 import email from "./routes/sendMail.js";
 import eposNowCategories from "./routes/EposNowCategories.js";
 import apiKeys from "./routes/ApiKeys.js";
-import formSubmissions from "./routes/FormSubmissions.js";
-
 const app = new Hono();
-
-app.use(
-  "*",
-  apiKeyAuth({
+app.use("*", apiKeyAuth({
     // Configure via env API_KEYS="key1,key2"
     // Exclude health if you want it public:
     exclude: ["/health"], // remove this line to protect /health too
-  })
-);
-
+}));
 app.route("/eposNowTreatments", eposNowTreatments);
 app.route("/eposNowCategories", eposNowCategories);
 app.route("/googleReviews", googleReviews);
@@ -33,20 +26,15 @@ app.route("/treatmentSubCategories", treatmentSubCategories);
 app.route("/treatments", treatments);
 app.route("/clients", clients);
 app.route("/bookings", bookings);
-app.route("/formSubmissions", formSubmissions);
 app.route("/sendMail", email);
 app.route("/apiKeys", apiKeys);
 app.route("/health", health); // or just inline handler
-
 // app.get("/", (c) => {
 //   return c.text("Hello Hono!");
 // });
-serve(
-  {
+serve({
     fetch: app.fetch,
     port: 3001,
-  },
-  (info) => {
+}, (info) => {
     console.log(`Server is running on http://localhost:${info.port}`);
-  }
-);
+});
