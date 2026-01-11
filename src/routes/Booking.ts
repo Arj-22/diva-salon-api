@@ -265,12 +265,14 @@ bookings.get(
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
       const status = c.req.query("status");
       const clientId = c.req.query("clientId");
+      const appointmentDate = c.req.query("appointmentDate");
 
       return buildCacheKey("bookings", {
         page,
         per,
         status,
         clientId,
+        appointmentDate,
       });
     },
     ttlSeconds: 300,
@@ -280,6 +282,7 @@ bookings.get(
 
     const status = c.req.query("status");
     const clientId = c.req.query("clientId");
+    const appointmentDate = c.req.query("appointmentDate");
     const { page, perPage, start, end } = parsePagination(c);
 
     let query = supabase
@@ -294,10 +297,18 @@ bookings.get(
     if (status && status !== "all") {
       query = query.eq("status", status);
     }
-    if (clientId) {
+    if (clientId && clientId !== null) {
       query = query.eq("clientId", clientId);
     }
-
+    if (appointmentDate) {
+      const dateStart = new Date(appointmentDate);
+      dateStart.setHours(0, 0, 0, 0);
+      const dateEnd = new Date(appointmentDate);
+      dateEnd.setHours(23, 59, 59, 999);
+      query = query
+        .gte("appointmentStartTime", dateStart.toISOString())
+        .lte("appointmentStartTime", dateEnd.toISOString());
+    }
     const { data, error, count } = await query;
 
     if (error) {
