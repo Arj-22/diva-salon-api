@@ -211,7 +211,8 @@ bookings.post(
       await supabase.from("Booking").delete().eq("id", bookingRow.id);
       return c.json({ error: "Failed to send email" }, 500);
     }
-    cacheInvalidate("bookings");
+    cacheInvalidate("bookings:*");
+    cacheInvalidate("availability:*");
 
     return c.json(
       {
@@ -250,7 +251,8 @@ bookings.patch("/:bookingId{[0-9]+}", async (c) => {
     );
   }
 
-  cacheInvalidate("bookings");
+  cacheInvalidate("bookings:*");
+  cacheInvalidate("availability:*");
 
   return c.json({ message: "Booking updated", booking: updatedBooking });
 });
@@ -262,11 +264,13 @@ bookings.get(
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
       const status = c.req.query("status");
+      const clientId = c.req.query("clientId");
 
       return buildCacheKey("bookings", {
         page,
         per,
         status,
+        clientId,
       });
     },
     ttlSeconds: 300,
@@ -275,16 +279,23 @@ bookings.get(
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
     const status = c.req.query("status");
+    const clientId = c.req.query("clientId");
     const { page, perPage, start, end } = parsePagination(c);
 
     let query = supabase
       .from("Booking")
-      .select(`*, Client(id, name, email, phoneNumber)`, { count: "exact" })
+      .select(
+        `*, Client (id, name, email, phoneNumber), Treatment(*, EposNowTreatment(Name, SalePriceIncTax)) `,
+        { count: "exact" }
+      )
       .order("created_at", { ascending: false })
       .range(start, end);
 
-    if (status) {
+    if (status && status !== "all") {
       query = query.eq("status", status);
+    }
+    if (clientId) {
+      query = query.eq("clientId", clientId);
     }
 
     const { data, error, count } = await query;
@@ -308,6 +319,7 @@ bookings.get(
       appointmentStartTime: booking.appointmentStartTime,
       appointmentEndTime: booking.appointmentEndTime,
       treatmentId: booking.treatmentId,
+      treatment: booking.Treatment,
       created_at: booking.created_at,
       client: booking.Client,
     }));
@@ -335,8 +347,9 @@ bookings.get(
     const { data, error } = await supabase
       .from("Booking")
       .select(
-        `id, message, created_at, status, Client (id, name, email, phoneNumber), Treatment(*, EposNowTreatment(Name, SalePriceIncTax)) `
+        `*, Client (id, name, email, phoneNumber), Treatment(*, EposNowTreatment(Name, SalePriceIncTax)) `
       )
+
       .eq("id", id)
       .single();
 
@@ -354,6 +367,10 @@ bookings.get(
     const booking = {
       id: data.id,
       message: data.message,
+      status: data.status,
+      appointmentStartTime: data.appointmentStartTime,
+      appointmentEndTime: data.appointmentEndTime,
+      treatmentId: data.treatmentId,
       created_at: data.created_at,
       client: data.Client,
       treatment: data.Treatment,
@@ -388,7 +405,7 @@ bookings.get(
     const { data, error, count } = await supabase
       .from("Booking")
       .select(
-        `*, Client(id, name, email, phoneNumber), Treatment_Booking (treatmentId)`,
+        `*, Client(id, name, email, phoneNumber), Treatment(*, EposNowTreatment(Name, SalePriceIncTax)) `,
         { count: "exact" }
       )
       .eq("clientId", clientId)
@@ -412,9 +429,11 @@ bookings.get(
       message: booking.message,
       created_at: booking.created_at,
       client: booking.Client,
-      treatmentIds: booking.Treatment_Booking.map(
-        (tb: { treatmentId: number }) => tb.treatmentId
-      ),
+      status: booking.status,
+      appointmentStartTime: booking.appointmentStartTime,
+      appointmentEndTime: booking.appointmentEndTime,
+      treatmentId: booking.treatmentId,
+      treatment: booking.Treatment,
     }));
 
     return c.json({
@@ -430,8 +449,7 @@ bookings.get(
     key: (c) => {
       const treatmentId = c.req.query("treatmentId");
       const date = c.req.query("date");
-      return buildCacheKey("bookings", {
-        route: "availability",
+      return buildCacheKey("availability", {
         treatmentId,
         date,
       });

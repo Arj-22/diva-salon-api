@@ -357,7 +357,7 @@ treatments.post("/createForEposTreatments", async (c) => {
     createdCount++;
   }
 
-  void cacheInvalidate("treatments:*").catch(() => {});
+  cacheInvalidate("treatments:*");
   return c.json({
     message: `Created ${createdCount} treatments for Epos Now treatments.`,
   });
@@ -388,7 +388,7 @@ treatments.patch("/:id{[0-9]+}", async (c) => {
 
   if (error) return c.json({ error: error.message }, 500);
 
-  void cacheInvalidate("treatments:*").catch(() => {});
+  cacheInvalidate("treatments:*");
   return c.json({
     message: "Treatment updated successfully",
     treatment: data,
