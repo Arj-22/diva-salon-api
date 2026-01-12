@@ -24,7 +24,7 @@ const supabase =
 
 const parseCategoryActive = (c: Context<{}, any, {}>) => {
   const raw = c.req.query("categoryActive");
-  if (raw == null) return undefined;
+  if (raw == null || raw == "all") return undefined;
   const normalized = raw.trim().toLowerCase();
   if (["true", "1", "yes", "on"].includes(normalized)) return true;
   if (["false", "0", "no", "off"].includes(normalized)) return false;
@@ -33,7 +33,7 @@ const parseCategoryActive = (c: Context<{}, any, {}>) => {
 
 const parseActiveFlag = (c: Context) => {
   const raw = c.req.query("active");
-  if (raw == null) return undefined;
+  if (raw == null || raw == "all") return undefined;
   const normalized = raw.trim().toLowerCase();
   if (["true", "1", "yes", "on"].includes(normalized)) return true;
   if (["false", "0", "no", "off"].includes(normalized)) return false;
@@ -47,10 +47,12 @@ treatments.get(
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 21);
       const active = c.req.query("active") || "";
+      const categoryId = c.req.query("categoryId") || "";
       return buildCacheKey("treatments", {
         page,
         per,
         active,
+        categoryId,
       });
     },
     ttlSeconds: 300,
@@ -68,6 +70,13 @@ treatments.get(
         { count: "exact" }
       );
     if (typeof active === "boolean") query = query.eq("showOnWeb", active);
+
+    if (
+      c.req.query("categoryId") &&
+      !isNaN(Number(c.req.query("categoryId")))
+    ) {
+      query = query.eq("treatmentCategoryId", c.req.query("categoryId"));
+    }
 
     const { data, error, count } = await query.range(start, end);
 
