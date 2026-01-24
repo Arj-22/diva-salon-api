@@ -155,15 +155,25 @@ clients.patch("/:id", async (c) => {
     return c.json(formatZodError(parsed.error), 400);
   }
 
-  const updates = {
-    name: parsed.data.name,
-    email: parsed.data.email ?? null,
-    firstName: parsed.data.firstName ?? null,
-    lastName: parsed.data.lastName ?? null,
-    phoneNumber: parsed.data.phoneNumber ?? null,
+  const updates: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
 
+  if (parsed.data.name !== undefined) {
+    updates.name = parsed.data.name;
+  }
+  if (parsed.data.email !== undefined) {
+    updates.email = parsed.data.email;
+  }
+  if (parsed.data.firstName !== undefined) {
+    updates.firstName = parsed.data.firstName;
+  }
+  if (parsed.data.lastName !== undefined) {
+    updates.lastName = parsed.data.lastName;
+  }
+  if (parsed.data.phoneNumber !== undefined) {
+    updates.phoneNumber = parsed.data.phoneNumber;
+  }
   const { data, error } = await supabase
     .from("Client")
     .update(updates)
