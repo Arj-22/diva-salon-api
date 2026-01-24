@@ -67,7 +67,7 @@ treatments.get(
       .from("Treatment")
       .select(
         `*, EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax), TreatmentCategory(name, description), TreatmentSubCategory(name, description)`,
-        { count: "exact" }
+        { count: "exact" },
       );
     if (typeof active === "boolean") query = query.eq("showOnWeb", active);
 
@@ -90,7 +90,7 @@ treatments.get(
       treatments: items,
       meta: { total, page, perPage, totalPages },
     });
-  }
+  },
 );
 
 treatments.get("/:id{[0-9]+}", async (c) => {
@@ -105,7 +105,7 @@ treatments.get("/:id{[0-9]+}", async (c) => {
   const { data, error } = await supabase
     .from("Treatment")
     .select(
-      `*, EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax), TreatmentCategory(name, description), TreatmentSubCategory(name, description)`
+      `*, EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax), TreatmentCategory(name, description), TreatmentSubCategory(name, description)`,
     )
     .eq("id", treatmentId)
     .single();
@@ -142,7 +142,7 @@ treatments.get(
       .from("Treatment")
       .select(
         `*, EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax), TreatmentCategory(id, name, description, href), TreatmentSubCategory(name, description)`,
-        { count: "exact" }
+        { count: "exact" },
       );
     if (typeof catActive === "boolean")
       query = query.eq("showOnWeb", catActive);
@@ -185,7 +185,7 @@ treatments.get(
       categories,
       meta: { total, page, perPage, totalPages },
     });
-  }
+  },
 );
 
 // byCategory
@@ -217,7 +217,7 @@ treatments.get(
       .from("Treatment")
       .select(
         `*, EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax), TreatmentCategory(name, description), TreatmentSubCategory(name, description)`,
-        { count: "exact" }
+        { count: "exact" },
       )
       .eq("treatmentCategoryId", treatmentCategoryId);
     if (typeof catActive === "boolean")
@@ -235,7 +235,7 @@ treatments.get(
       treatments: items,
       meta: { total, page, perPage, totalPages },
     });
-  }
+  },
 );
 
 // byCategorySlug (keeps inner join, only adds showOnWeb filter)
@@ -270,7 +270,7 @@ treatments.get(
          EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax),
          TreatmentCategory!inner(id, name, description, href),
          TreatmentSubCategory(name, description)`,
-        { count: "exact" }
+        { count: "exact" },
       )
       .eq("TreatmentCategory.href", treatmentCategorySlug);
 
@@ -290,7 +290,7 @@ treatments.get(
       treatments: items,
       meta: { total, page, perPage, totalPages },
     });
-  }
+  },
 );
 
 treatments.post("/", async (c) => {
@@ -310,7 +310,7 @@ treatments.post("/", async (c) => {
 
   if (error) return c.json({ error: error.message }, 500);
 
-  void cacheInvalidate("treatments:*").catch(() => {});
+  cacheInvalidate("treatments:*");
   return c.json({ treatment: data }, 201);
 });
 
@@ -337,7 +337,7 @@ treatments.post("/createForEposTreatments", async (c) => {
   }
 
   const existingIds = new Set(
-    (existingTreatments ?? []).map((t) => t.eposNowTreatmentId)
+    (existingTreatments ?? []).map((t) => t.eposNowTreatmentId),
   );
 
   for (const eposTreatment of eposTreatments) {
@@ -358,7 +358,7 @@ treatments.post("/createForEposTreatments", async (c) => {
 
     if (insertError) {
       console.error(
-        `Failed to create treatment for EposNowTreatment ID ${eposTreatment.Id}: ${insertError.message}`
+        `Failed to create treatment for EposNowTreatment ID ${eposTreatment.Id}: ${insertError.message}`,
       );
       continue;
     }

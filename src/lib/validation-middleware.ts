@@ -3,6 +3,8 @@ import crypto from "node:crypto";
 import {
   BookingSchema,
   type BookingInput,
+  BookingUpdateSchema,
+  type BookingUpdateInput,
 } from "../../utils/schemas/BookingSchema.js";
 import {
   ClientSchema,
@@ -28,7 +30,7 @@ export function validateBooking(schema: z.ZodTypeAny = BookingSchema) {
           error: "Validation failed",
           details: formatZodError(parsed.error),
         },
-        400
+        400,
       );
     }
 
@@ -50,11 +52,38 @@ export function validateClient(schema: z.ZodTypeAny = ClientSchema) {
     if (!parsed.success) {
       return c.json(
         { error: "Validation failed", details: formatZodError(parsed.error) },
-        400
+        400,
       );
     }
 
     c.set("clientData", parsed.data as ClientInput);
+    await next();
+  };
+}
+
+export function validateBookingUpdate(
+  schema: z.ZodTypeAny = BookingUpdateSchema,
+) {
+  return async (c: Context, next: Next) => {
+    let body: any;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: "Validation failed",
+          details: formatZodError(parsed.error),
+        },
+        400,
+      );
+    }
+
+    c.set("bookingData", parsed.data as BookingUpdateInput);
     await next();
   };
 }
