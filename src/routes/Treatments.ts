@@ -24,7 +24,7 @@ const supabase =
 
 const parseCategoryActive = (c: Context<{}, any, {}>) => {
   const raw = c.req.query("categoryActive");
-  if (raw == null) return undefined;
+  if (raw == null || raw == "all") return undefined;
   const normalized = raw.trim().toLowerCase();
   if (["true", "1", "yes", "on"].includes(normalized)) return true;
   if (["false", "0", "no", "off"].includes(normalized)) return false;
@@ -33,7 +33,7 @@ const parseCategoryActive = (c: Context<{}, any, {}>) => {
 
 const parseActiveFlag = (c: Context) => {
   const raw = c.req.query("active");
-  if (raw == null) return undefined;
+  if (raw == null || raw == "all") return undefined;
   const normalized = raw.trim().toLowerCase();
   if (["true", "1", "yes", "on"].includes(normalized)) return true;
   if (["false", "0", "no", "off"].includes(normalized)) return false;
@@ -47,10 +47,12 @@ treatments.get(
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 21);
       const active = c.req.query("active") || "";
+      const categoryId = c.req.query("categoryId") || "";
       return buildCacheKey("treatments", {
         page,
         per,
         active,
+        categoryId,
       });
     },
     ttlSeconds: 300,
@@ -65,9 +67,16 @@ treatments.get(
       .from("Treatment")
       .select(
         `*, EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax), TreatmentCategory(name, description), TreatmentSubCategory(name, description)`,
-        { count: "exact" }
+        { count: "exact" },
       );
     if (typeof active === "boolean") query = query.eq("showOnWeb", active);
+
+    if (
+      c.req.query("categoryId") &&
+      !isNaN(Number(c.req.query("categoryId")))
+    ) {
+      query = query.eq("treatmentCategoryId", c.req.query("categoryId"));
+    }
 
     const { data, error, count } = await query.range(start, end);
 
@@ -81,7 +90,7 @@ treatments.get(
       treatments: items,
       meta: { total, page, perPage, totalPages },
     });
-  }
+  },
 );
 
 treatments.get("/:id{[0-9]+}", async (c) => {
@@ -96,7 +105,7 @@ treatments.get("/:id{[0-9]+}", async (c) => {
   const { data, error } = await supabase
     .from("Treatment")
     .select(
-      `*, EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax), TreatmentCategory(name, description), TreatmentSubCategory(name, description)`
+      `*, EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax), TreatmentCategory(name, description), TreatmentSubCategory(name, description)`,
     )
     .eq("id", treatmentId)
     .single();
@@ -133,7 +142,7 @@ treatments.get(
       .from("Treatment")
       .select(
         `*, EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax), TreatmentCategory(id, name, description, href), TreatmentSubCategory(name, description)`,
-        { count: "exact" }
+        { count: "exact" },
       );
     if (typeof catActive === "boolean")
       query = query.eq("showOnWeb", catActive);
@@ -176,7 +185,7 @@ treatments.get(
       categories,
       meta: { total, page, perPage, totalPages },
     });
-  }
+  },
 );
 
 // byCategory
@@ -208,7 +217,7 @@ treatments.get(
       .from("Treatment")
       .select(
         `*, EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax), TreatmentCategory(name, description), TreatmentSubCategory(name, description)`,
-        { count: "exact" }
+        { count: "exact" },
       )
       .eq("treatmentCategoryId", treatmentCategoryId);
     if (typeof catActive === "boolean")
@@ -226,7 +235,7 @@ treatments.get(
       treatments: items,
       meta: { total, page, perPage, totalPages },
     });
-  }
+  },
 );
 
 // byCategorySlug (keeps inner join, only adds showOnWeb filter)
@@ -261,7 +270,7 @@ treatments.get(
          EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax),
          TreatmentCategory!inner(id, name, description, href),
          TreatmentSubCategory(name, description)`,
-        { count: "exact" }
+        { count: "exact" },
       )
       .eq("TreatmentCategory.href", treatmentCategorySlug);
 
@@ -281,7 +290,7 @@ treatments.get(
       treatments: items,
       meta: { total, page, perPage, totalPages },
     });
-  }
+  },
 );
 
 treatments.post("/", async (c) => {
@@ -301,7 +310,7 @@ treatments.post("/", async (c) => {
 
   if (error) return c.json({ error: error.message }, 500);
 
-  void cacheInvalidate("treatments:*").catch(() => {});
+  cacheInvalidate("treatments:*");
   return c.json({ treatment: data }, 201);
 });
 
@@ -328,7 +337,7 @@ treatments.post("/createForEposTreatments", async (c) => {
   }
 
   const existingIds = new Set(
-    (existingTreatments ?? []).map((t) => t.eposNowTreatmentId)
+    (existingTreatments ?? []).map((t) => t.eposNowTreatmentId),
   );
 
   for (const eposTreatment of eposTreatments) {
@@ -349,7 +358,7 @@ treatments.post("/createForEposTreatments", async (c) => {
 
     if (insertError) {
       console.error(
-        `Failed to create treatment for EposNowTreatment ID ${eposTreatment.Id}: ${insertError.message}`
+        `Failed to create treatment for EposNowTreatment ID ${eposTreatment.Id}: ${insertError.message}`,
       );
       continue;
     }
@@ -357,7 +366,7 @@ treatments.post("/createForEposTreatments", async (c) => {
     createdCount++;
   }
 
-  void cacheInvalidate("treatments:*").catch(() => {});
+  cacheInvalidate("treatments:*");
   return c.json({
     message: `Created ${createdCount} treatments for Epos Now treatments.`,
   });
@@ -388,7 +397,7 @@ treatments.patch("/:id{[0-9]+}", async (c) => {
 
   if (error) return c.json({ error: error.message }, 500);
 
-  void cacheInvalidate("treatments:*").catch(() => {});
+  cacheInvalidate("treatments:*");
   return c.json({
     message: "Treatment updated successfully",
     treatment: data,

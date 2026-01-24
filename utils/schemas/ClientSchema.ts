@@ -30,4 +30,14 @@ export const ClientSchema = z
   })
   .strict();
 
+export const ClientUpdateSchema = z.object({
+  name: z.string().optional(),
+  firstName: z.string().trim().optional(),
+  lastName: z.string().trim().optional(),
+  email: z.string().email("Please provide a valid email").optional(),
+  phoneNumber: z.string().trim().optional(),
+});
+
+export type ClientFormValues = z.infer<typeof ClientUpdateSchema>;
+
 export type ClientInput = z.infer<typeof ClientSchema>;

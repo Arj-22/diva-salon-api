@@ -1,10 +1,15 @@
 import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { buildCacheKey, cacheResponse } from "../lib/cache-middleware.js";
+import {
+  buildCacheKey,
+  cacheInvalidate,
+  cacheResponse,
+} from "../lib/cache-middleware.js";
 import { formatZodError, parsePagination } from "../../utils/helpers.js";
 import {
   ClientSchema,
+  ClientUpdateSchema,
   type ClientInput,
 } from "../../utils/schemas/ClientSchema.js";
 import { validateClient } from "../lib/validation-middleware.js";
@@ -105,5 +110,90 @@ clients.get(
     });
   }
 );
+
+clients.get("/:id", async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+  const id = c.req.param("id");
+  if (!id) return c.json({ error: "Client ID is required" }, 400);
+
+  const { data, error } = await supabase
+    .from("Client")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error?.code === "PGRST116" || error?.message?.includes("No rows")) {
+    return c.json({ error: "Client not found" }, 404);
+  }
+
+  if (error) {
+    return c.json(
+      { error: "Failed to fetch client", details: error.message },
+      500
+    );
+  }
+
+  return c.json({ client: data }, 200);
+});
+
+clients.patch("/:id", async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+  const id = c.req.param("id");
+  if (!id) return c.json({ error: "Client ID is required" }, 400);
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const parsed = ClientUpdateSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(formatZodError(parsed.error), 400);
+  }
+
+  const updates: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (parsed.data.name !== undefined) {
+    updates.name = parsed.data.name;
+  }
+  if (parsed.data.email !== undefined) {
+    updates.email = parsed.data.email;
+  }
+  if (parsed.data.firstName !== undefined) {
+    updates.firstName = parsed.data.firstName;
+  }
+  if (parsed.data.lastName !== undefined) {
+    updates.lastName = parsed.data.lastName;
+  }
+  if (parsed.data.phoneNumber !== undefined) {
+    updates.phoneNumber = parsed.data.phoneNumber;
+  }
+  const { data, error } = await supabase
+    .from("Client")
+    .update(updates)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error?.code === "PGRST116" || error?.message?.includes("No rows")) {
+    return c.json({ error: "Client not found" }, 404);
+  }
+
+  if (error) {
+    return c.json(
+      { error: "Failed to update client", details: error.message },
+      500
+    );
+  }
+  cacheInvalidate(`clients:*`);
+
+  return c.json({ client: data }, 200);
+});
 
 export default clients;

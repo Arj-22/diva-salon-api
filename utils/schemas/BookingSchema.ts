@@ -16,3 +16,7 @@ export const BookingSchema = z
   })
   .strict();
 export type BookingInput = z.infer<typeof BookingSchema>;
+
+export const BookingUpdateSchema = BookingSchema.partial();
+
+export type BookingUpdateInput = z.infer<typeof BookingUpdateSchema>;
