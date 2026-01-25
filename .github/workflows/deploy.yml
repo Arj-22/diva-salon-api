@@ -20,7 +20,8 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd /app
-            git pull origin main
-            docker compose down
+            set -e
+            cd /docker/diva-salon-api
+            git fetch origin
+            git reset --hard origin/main
             docker compose up -d --build
