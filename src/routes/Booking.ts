@@ -1,7 +1,10 @@
 import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { validateBooking } from "../lib/validation-middleware.js";
+import {
+  validateBooking,
+  validateBookingUpdate,
+} from "../lib/validation-middleware.js";
 import {
   buildCacheKey,
   cacheInvalidate,
@@ -72,7 +75,7 @@ bookings.post(
             error: "Failed to query client by email",
             details: findEmailError.message,
           },
-          500
+          500,
         );
       }
 
@@ -97,7 +100,7 @@ bookings.post(
             error: "Failed to query client by phone",
             details: findPhoneError.message,
           },
-          500
+          500,
         );
       }
 
@@ -122,7 +125,7 @@ bookings.post(
             error: "Failed to create client",
             details: createClientError?.message,
           },
-          500
+          500,
         );
       }
       clientRow = createdClient;
@@ -144,14 +147,14 @@ bookings.post(
           error: "Failed to verify booking availability",
           details: conflictCheckError.message,
         },
-        500
+        500,
       );
     }
 
     if (conflictingBooking) {
       return c.json(
         { error: "This appointment start time is already booked" },
-        409
+        409,
       );
     }
 
@@ -162,7 +165,7 @@ bookings.post(
       .single();
     const appointmentEndTime = new Date(
       appointmentStart.getTime() +
-        treatmentDurationMinutes.data?.durationInMinutes * 60000
+        treatmentDurationMinutes.data?.durationInMinutes * 60000,
     ).toISOString();
     // Define booking payload now with real clientId
     const bookingPayload = {
@@ -177,7 +180,7 @@ bookings.post(
       .from("Booking")
       .insert(bookingPayload)
       .select(
-        "id, message, clientId, treatmentId, appointmentStartTime, appointmentEndTime, Treatment (*, EposNowTreatment(Name, SalePriceIncTax))"
+        "id, message, clientId, treatmentId, appointmentStartTime, appointmentEndTime, Treatment (*, EposNowTreatment(Name, SalePriceIncTax))",
       )
       .single();
 
@@ -188,7 +191,7 @@ bookings.post(
       }
       return c.json(
         { error: "Failed to create booking", details: bookingError?.message },
-        500
+        500,
       );
     }
 
@@ -211,7 +214,8 @@ bookings.post(
       await supabase.from("Booking").delete().eq("id", bookingRow.id);
       return c.json({ error: "Failed to send email" }, 500);
     }
-    cacheInvalidate("bookings");
+    cacheInvalidate("bookings:*");
+    cacheInvalidate("availability:*");
 
     return c.json(
       {
@@ -226,10 +230,35 @@ bookings.post(
           newClient: newClientCreated,
         },
       },
-      201
+      201,
+    );
+  },
+);
+
+bookings.patch("/:bookingId{[0-9]+}", validateBookingUpdate(), async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+  const id = Number(c.req.param("bookingId"));
+  const updateData = await c.req.json();
+
+  const { data: updatedBooking, error } = await supabase
+    .from("Booking")
+    .update(updateData)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) {
+    return c.json(
+      { error: "Failed to update booking", details: error.message },
+      500,
     );
   }
-);
+
+  cacheInvalidate("bookings:*");
+  cacheInvalidate("availability:*");
+
+  return c.json({ message: "Booking updated", booking: updatedBooking });
+});
 
 bookings.get(
   "/",
@@ -237,10 +266,16 @@ bookings.get(
     key: (c) => {
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+      const status = c.req.query("status");
+      const clientId = c.req.query("clientId");
+      const appointmentDate = c.req.query("appointmentDate");
 
       return buildCacheKey("bookings", {
         page,
         per,
+        status,
+        clientId,
+        appointmentDate,
       });
     },
     ttlSeconds: 300,
@@ -248,22 +283,44 @@ bookings.get(
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
+    const status = c.req.query("status");
+    const clientId = c.req.query("clientId");
+    const appointmentDate = c.req.query("appointmentDate");
     const { page, perPage, start, end } = parsePagination(c);
 
-    const { data, error, count } = await supabase
+    let query = supabase
       .from("Booking")
       .select(
-        // `id, message, created_at, Client (id, name, email, phoneNumber), Treatment_Booking (treatmentId)`,
-        `*, Client(id, name, email, phoneNumber)`,
-        { count: "exact" }
+        `*, Client (id, name, email, phoneNumber), Treatment(*, EposNowTreatment(Name, SalePriceIncTax)) `,
+        { count: "exact" },
       )
       .order("created_at", { ascending: false })
       .range(start, end);
 
+    if (status && status !== "all") {
+      query = query.eq("status", status);
+    }
+    if (clientId && clientId !== null) {
+      query = query.eq("clientId", clientId);
+    }
+    if (appointmentDate) {
+      const dateStart = new Date(appointmentDate);
+      if (Number.isNaN(dateStart.getTime())) {
+        return c.json({ error: "Invalid appointmentDate" }, 400);
+      }
+      const dateEnd = new Date(dateStart);
+      dateStart.setHours(0, 0, 0, 0);
+      dateEnd.setHours(23, 59, 59, 999);
+      query = query
+        .gte("appointmentStartTime", dateStart.toISOString())
+        .lte("appointmentStartTime", dateEnd.toISOString());
+    }
+    const { data, error, count } = await query;
+
     if (error) {
       return c.json(
         { error: "Failed to fetch bookings", details: error.message },
-        500
+        500,
       );
     }
 
@@ -279,6 +336,7 @@ bookings.get(
       appointmentStartTime: booking.appointmentStartTime,
       appointmentEndTime: booking.appointmentEndTime,
       treatmentId: booking.treatmentId,
+      treatment: booking.Treatment,
       created_at: booking.created_at,
       client: booking.Client,
     }));
@@ -287,7 +345,7 @@ bookings.get(
       bookings: bookingsList,
       meta: { total, page, perPage, totalPages },
     });
-  }
+  },
 );
 
 bookings.get(
@@ -306,15 +364,16 @@ bookings.get(
     const { data, error } = await supabase
       .from("Booking")
       .select(
-        `id, message, created_at, Client (id, name, email, phoneNumber), Treatment_Booking (treatmentId)`
+        `*, Client (id, name, email, phoneNumber), Treatment(*, EposNowTreatment(Name, SalePriceIncTax)) `,
       )
+
       .eq("id", id)
       .single();
 
     if (error) {
       return c.json(
         { error: "Failed to fetch booking", details: error.message },
-        500
+        500,
       );
     }
 
@@ -325,13 +384,17 @@ bookings.get(
     const booking = {
       id: data.id,
       message: data.message,
+      status: data.status,
+      appointmentStartTime: data.appointmentStartTime,
+      appointmentEndTime: data.appointmentEndTime,
+      treatmentId: data.treatmentId,
       created_at: data.created_at,
       client: data.Client,
-      treatmentIds: data.Treatment_Booking.map((tb) => tb.treatmentId),
+      treatment: data.Treatment,
     };
 
     return c.json({ booking });
-  }
+  },
 );
 
 bookings.get(
@@ -359,8 +422,8 @@ bookings.get(
     const { data, error, count } = await supabase
       .from("Booking")
       .select(
-        `*, Client(id, name, email, phoneNumber), Treatment_Booking (treatmentId)`,
-        { count: "exact" }
+        `*, Client(id, name, email, phoneNumber), Treatment(*, EposNowTreatment(Name, SalePriceIncTax)) `,
+        { count: "exact" },
       )
       .eq("clientId", clientId)
       .order("created_at", { ascending: false })
@@ -369,7 +432,7 @@ bookings.get(
     if (error) {
       return c.json(
         { error: "Failed to fetch bookings", details: error.message },
-        500
+        500,
       );
     }
 
@@ -383,16 +446,18 @@ bookings.get(
       message: booking.message,
       created_at: booking.created_at,
       client: booking.Client,
-      treatmentIds: booking.Treatment_Booking.map(
-        (tb: { treatmentId: number }) => tb.treatmentId
-      ),
+      status: booking.status,
+      appointmentStartTime: booking.appointmentStartTime,
+      appointmentEndTime: booking.appointmentEndTime,
+      treatmentId: booking.treatmentId,
+      treatment: booking.Treatment,
     }));
 
     return c.json({
       bookings: bookingsList,
       meta: { total, page, perPage, totalPages },
     });
-  }
+  },
 );
 
 bookings.get(
@@ -401,8 +466,7 @@ bookings.get(
     key: (c) => {
       const treatmentId = c.req.query("treatmentId");
       const date = c.req.query("date");
-      return buildCacheKey("bookings", {
-        route: "availability",
+      return buildCacheKey("availability", {
         treatmentId,
         date,
       });
@@ -463,11 +527,12 @@ bookings.get(
 
     // 4️⃣ Generate slots
     const slots: string[] = [];
+    const slotIncrementMinutes = 10;
 
     for (
       let cursor = new Date(dayStart);
       cursor.getTime() + duration * 60000 <= dayEnd.getTime();
-      cursor = new Date(cursor.getTime() + duration * 60000)
+      cursor = new Date(cursor.getTime() + slotIncrementMinutes * 60000)
     ) {
       const slotStart = new Date(cursor);
       const slotEnd = new Date(slotStart.getTime() + duration * 60000);
@@ -481,8 +546,8 @@ bookings.get(
           slotStart,
           slotEnd,
           new Date(b.appointmentStartTime),
-          new Date(b.appointmentEndTime)
-        )
+          new Date(b.appointmentEndTime),
+        ),
       );
 
       if (!conflict) {
@@ -496,7 +561,7 @@ bookings.get(
       durationInMinutes: duration,
       slots,
     });
-  }
+  },
 );
 
 export default bookings;
