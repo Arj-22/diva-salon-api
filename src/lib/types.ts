@@ -168,3 +168,16 @@ export type TreatmentSubCategory = {
   updated_at?: string | null;
   created_at: string; // ISO
 };
+
+export type Staff = {
+  id: string;
+  clerk_id: string;
+  email_addresses: string[];
+  image_url?: string | null;
+  username?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone_number?: string | null;
+  created_at: string; // ISO
+  updated_at?: string | null;
+};
