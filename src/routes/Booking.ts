@@ -40,6 +40,9 @@ bookings.post(
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
+
     // Use validated booking data (avoid re-parsing)
     const res = await c.req.json();
     const bookingData = {
@@ -49,6 +52,7 @@ bookings.post(
       message: res.message,
       treatmentId: res.treatmentId,
       appointmentStartTime: res.appointmentStartTime,
+      organisation_id: organisation_id,
     };
 
     // Find or create client
@@ -139,6 +143,7 @@ bookings.post(
         .from("Booking")
         .select("id")
         .eq("appointmentStartTime", bookingData.appointmentStartTime)
+        .eq("organisation_id", organisation_id)
         .maybeSingle();
 
     if (conflictCheckError) {
@@ -162,6 +167,7 @@ bookings.post(
       .from("Treatment")
       .select("durationInMinutes")
       .eq("id", bookingData.treatmentId)
+      .eq("organisation_id", organisation_id)
       .single();
     const appointmentEndTime = new Date(
       appointmentStart.getTime() +
@@ -174,6 +180,7 @@ bookings.post(
       treatmentId: bookingData.treatmentId,
       appointmentStartTime: bookingData.appointmentStartTime,
       appointmentEndTime: appointmentEndTime,
+      organisation_id: organisation_id,
     };
 
     const { data: bookingRow, error: bookingError } = await supabase
@@ -269,6 +276,7 @@ bookings.get(
       const status = c.req.query("status");
       const clientId = c.req.query("clientId");
       const appointmentDate = c.req.query("appointmentDate");
+      const organisationId = c.get("organisation_id");
 
       return buildCacheKey("bookings", {
         page,
@@ -276,6 +284,7 @@ bookings.get(
         status,
         clientId,
         appointmentDate,
+        organisationId,
       });
     },
     ttlSeconds: 300,
@@ -287,6 +296,8 @@ bookings.get(
     const clientId = c.req.query("clientId");
     const appointmentDate = c.req.query("appointmentDate");
     const { page, perPage, start, end } = parsePagination(c);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
 
     let query = supabase
       .from("Booking")
@@ -295,6 +306,7 @@ bookings.get(
         { count: "exact" },
       )
       .order("created_at", { ascending: false })
+
       .range(start, end);
 
     if (status && status !== "all") {
@@ -302,6 +314,9 @@ bookings.get(
     }
     if (clientId && clientId !== null) {
       query = query.eq("clientId", clientId);
+    }
+    if (organisation_id) {
+      query = query.eq("organisation_id", organisation_id);
     }
     if (appointmentDate) {
       const dateStart = new Date(appointmentDate);
@@ -355,6 +370,7 @@ bookings.get(
       buildCacheKey("bookings", {
         route: "byBookingId",
         bookingId: c.req.param("bookingId"),
+        organisation_id: c.get("organisation_id"),
       }),
     ttlSeconds: 300,
   }),
@@ -403,18 +419,23 @@ bookings.get(
     key: (c) => {
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+      const organisation_id = c.get("organisation_id");
 
       return buildCacheKey("bookings", {
         route: "byClientId",
         clientId: c.req.param("clientId"),
         page,
         per,
+        organisation_id,
       });
     },
     ttlSeconds: 300,
   }),
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
 
     const clientId = Number(c.req.param("clientId"));
     const { page, perPage, start, end } = parsePagination(c);
@@ -426,6 +447,7 @@ bookings.get(
         { count: "exact" },
       )
       .eq("clientId", clientId)
+      .eq("organisation_id", organisation_id)
       .order("created_at", { ascending: false })
       .range(start, end);
 
@@ -466,9 +488,11 @@ bookings.get(
     key: (c) => {
       const treatmentId = c.req.query("treatmentId");
       const date = c.req.query("date");
+      const organisation_id = c.get("organisation_id");
       return buildCacheKey("availability", {
         treatmentId,
         date,
+        organisation_id,
       });
     },
     ttlSeconds: 60,
@@ -485,12 +509,16 @@ bookings.get(
       return c.json({ error: "Supabase not configured" }, 500);
     }
 
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
+
     // 1️⃣ Get treatment duration
     const { data: treatment } = await supabase
       .from("Treatment")
       .select("durationInMinutes")
       .eq("id", treatmentId)
       .eq("showOnWeb", true)
+      .eq("organisation_id", organisation_id)
       .single();
 
     if (!treatment) {
@@ -506,6 +534,7 @@ bookings.get(
       .from("OpeningHours")
       .select("opens_at, closes_at")
       .eq("Day", dayOfWeek)
+      .eq("organisation_id", organisation_id)
       .single();
 
     if (!hours) {
@@ -523,7 +552,8 @@ bookings.get(
       .select("appointmentStartTime, appointmentEndTime")
       // .neq("status", "cancelled")
       .gte("appointmentStartTime", dayStart.toISOString())
-      .lte("appointmentEndTime", dayEnd.toISOString());
+      .lte("appointmentEndTime", dayEnd.toISOString())
+      .eq("organisation_id", organisation_id);
 
     // 4️⃣ Generate slots
     const slots: string[] = [];

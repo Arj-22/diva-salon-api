@@ -178,6 +178,7 @@ export type Staff = {
   first_name?: string | null;
   last_name?: string | null;
   phone_number?: string | null;
+  organisation_id: string;
   created_at: string; // ISO
   updated_at?: string | null;
 };

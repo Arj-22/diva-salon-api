@@ -66,7 +66,7 @@ export function buildFullKey(keyId: string, token: string) {
  * - Persist only hashedKey in your database.
  */
 export async function createHashedApiKey(
-  opts: CreateApiKeyOptions = {}
+  opts: CreateApiKeyOptions = {},
 ): Promise<CreatedApiKey> {
   const tokenBytes = typeof opts.tokenBytes === "number" ? opts.tokenBytes : 32;
   const argon2Opts = opts.argon2Options ?? {
@@ -98,7 +98,7 @@ export async function createHashedApiKey(
  */
 export async function hashApiKey(
   fullKey: string,
-  opts: CreateApiKeyOptions = {}
+  opts: CreateApiKeyOptions = {},
 ): Promise<string> {
   const argon2Opts = opts.argon2Options ?? {
     memoryCost: 2 ** 16,
@@ -165,7 +165,7 @@ export function parseFullKey(fullKey: string): {
  * if (!parsed) { ...invalid... } else { use parsed.keyId ... }
  */
 export function tryParseFullKey(
-  fullKey: string
+  fullKey: string,
 ): { keyId: string; token: string } | null {
   try {
     return parseFullKey(fullKey);
@@ -183,8 +183,6 @@ export const verifyApiKey = async (apiKey: string) => {
   try {
     const parsed = parseFullKey(apiKey);
     keyId = parsed.keyId;
-
-    // console.log("Parsed keyId:", keyId, "from apiKey:", apiKey);
   } catch (err) {
     return { valid: false, error: "invalid_format" };
   }
@@ -203,12 +201,12 @@ export const verifyApiKey = async (apiKey: string) => {
     if (ok) {
       return { valid: true };
     }
-    // If cache verification failed, fall through to DB check
   }
+
   const { data, error } = await supabase
     .from("ApiKeys")
-    .select("hashedKey")
-    .eq("keyId", keyId) // Extract keyId from full key
+    .select("hashedKey, organisation_id")
+    .eq("keyId", keyId)
     .single();
 
   if (error || !data) {
@@ -221,7 +219,6 @@ export const verifyApiKey = async (apiKey: string) => {
   try {
     ok = await argon2.verify(hashedKey, apiKey);
   } catch (err) {
-    // argon2.verify throws on malformed hashes or internal errors
     console.error("verifyApiKey: argon2.verify error", err);
     ok = false;
   }
@@ -234,5 +231,5 @@ export const verifyApiKey = async (apiKey: string) => {
     console.error("cacheApiKey error:", err);
   });
 
-  return { valid: true };
+  return { valid: true, organisationId: data.organisation_id };
 };

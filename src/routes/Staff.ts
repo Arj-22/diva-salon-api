@@ -1,67 +1,61 @@
-// import { Hono } from "hono";
-// import { verifyWebhook } from "@clerk/backend/webhooks";
-// import { createClient } from "@supabase/supabase-js";
-// import { config } from "dotenv";
+import { Hono } from "hono";
+import { verifyWebhook } from "@clerk/backend/webhooks";
+import { createClient } from "@supabase/supabase-js";
+import { config } from "dotenv";
+import { buildCacheKey, cacheResponse } from "../lib/cache-middleware.js";
 
-// const staff = new Hono();
+const staff = new Hono();
 
-// config({ path: ".env" });
+config({ path: ".env" });
 
-// const SUPABASE_URL =
-//   process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-// const SUPABASE_ANON_KEY =
-//   process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const SUPABASE_URL =
+  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY =
+  process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// const supabase =
-//   SUPABASE_URL && SUPABASE_ANON_KEY
-//     ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-//     : null;
+const supabase =
+  SUPABASE_URL && SUPABASE_ANON_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
 
-// // Clerk webhook endpoint
-// staff.post("/", async (c) => {
-//   if (!supabase) return c.text("Supabase not configured", 500);
-//   try {
-//     const body = await c.req.text();
+// Clerk webhook endpoint
+staff.get(
+  "/",
+  cacheResponse({
+    key: (c) => {
+      const page = Number(c.req.query("page") || 1);
+      const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+      const organisation_id = c.get("organisation_id");
 
-//     // Verify webhook; throws if invalid
-//     const event = await verifyWebhook(
-//       // Clerk expects raw req with headers
-//       { rawBody: body, headers: c.req.headers },
-//       { signingSecret: process.env.CLERK_WEBHOOK_SIGNING_SECRET! },
-//     );
+      return buildCacheKey("staff", {
+        page,
+        per,
+        organisation_id,
+      });
+    },
+    ttlSeconds: 300,
+  }),
+  async (c) => {
+    if (!supabase) return c.text("Supabase not configured", 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
+    try {
+      const { data: staffData, error } = await supabase
+        .from("Staff")
+        .select("*")
+        .eq("organisation_id", organisation_id);
 
-//     console.log("Clerk Event:", event.type);
+      if (error) {
+        console.error("Error fetching staff data:", error);
+        return c.json({ error: "Failed to fetch staff data" }, 500);
+      }
 
-//     // Only handle user.created
-//     if (event.type === "user.created") {
-//       const user = event.data;
+      return c.json({ staff: staffData }, 200);
+    } catch (err) {
+      console.error("Staff route error:", err);
+      return c.json({ error: "Failed to fetch staff data" }, 500);
+    }
+  },
+);
 
-//       const email = user.email_addresses?.[0]?.email_address ?? null;
-
-//       //   const { data, error } = await supabase.from("staff").upsert(
-//       //     {
-//       //       clerk_id: user.id,
-//       //       email,
-//       //       first_name: user.first_name || null,
-//       //       last_name: user.last_name || null,
-//       //     },
-//       //     { onConflict: "clerk_id" },
-//       //   );
-
-//       //   if (error) {
-//       //     console.error("Supabase upsert error:", error);
-//       //     return c.text("Database error", 500);
-//       //   }
-
-//       console.log("User synced to Supabase:", event);
-//       console.log("user:", user);
-//     }
-
-//     return c.text("OK");
-//   } catch (err) {
-//     console.error("Webhook verification or processing failed:", err);
-//     return c.text("Invalid webhook", 400);
-//   }
-// });
-
-// export default staff;
+export default staff;

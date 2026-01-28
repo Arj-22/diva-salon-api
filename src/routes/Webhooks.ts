@@ -178,7 +178,7 @@ webhooks.post("/clerk-webhook", async (c) => {
       const clerkId = membership.public_user_data.user_id;
 
       const updatePayload = {
-        businessId: membership.organization.id,
+        organisation_id: membership.organization.id,
         //@ts-ignore
         role: membership.role_name,
         updated_at: new Date().toISOString(),
@@ -235,7 +235,7 @@ webhooks.post("/clerk-webhook", async (c) => {
       const { error } = await supabase
         .from("Staff")
         .update({
-          businessId: null,
+          organisation_id: null,
           role: null,
           updated_at: new Date().toISOString(),
         })
@@ -252,7 +252,7 @@ webhooks.post("/clerk-webhook", async (c) => {
       const { error } = await supabase
         .from("Staff")
         .update({
-          businessId: event.data.organization.id,
+          organisation_id: event.data.organization.id,
           role: event.data.role,
           updated_at: new Date().toISOString(),
         })
