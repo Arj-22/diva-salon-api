@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { get } from "http";
 import { getRedisClient } from "../lib/redisClient.js";
+import pkg from "../../package.json" assert { type: "json" };
 
 const app = new Hono();
 
@@ -17,7 +18,7 @@ app.get("/", async (c) => {
   //   return c.json({ ok: true, redis: false, error: (e as Error).message }, 200);
   // }
 
-  return c.json({ ok: true });
+  return c.json({ ok: true, version: pkg.version });
 });
 
 export default app;

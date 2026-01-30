@@ -36,11 +36,14 @@ eposNowCategories.get(
   }),
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
 
     const { page, perPage, start, end } = parsePagination(c);
     const { data, error, count } = await supabase
       .from("EposNowCategory")
       .select("*", { count: "exact" })
+      .eq("organisation_id", organisation_id)
       .range(start, end);
 
     if (error) return c.json({ error: error.message }, 500);

@@ -34,12 +34,14 @@ googleReviews.get(
       const min = c.req.query("minRating") || c.req.query("min") || "";
       const from = c.req.query("dateFrom") || c.req.query("from") || "";
       const to = c.req.query("dateTo") || c.req.query("to") || "";
+      const organisation_id = c.get("organisation_id");
       return buildCacheKey("googleReviews", {
         page,
         per,
         min,
         from,
         to,
+        organisation_id,
       });
     },
     ttlSeconds: 300,
@@ -47,6 +49,8 @@ googleReviews.get(
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const { page, perPage, start, end } = parsePagination(c);
     // parse optional minRating filter (1..5)
     const minRaw = c.req.query("minRating") || c.req.query("min");
@@ -90,7 +94,7 @@ googleReviews.get(
           GoogleReviewText( text, languageCode ),
           GoogleAuthorAttribution ( uri, photoUri, displayName )
         `,
-      { count: "exact" }
+      { count: "exact" },
     );
 
     if (minRating !== undefined && !Number.isNaN(minRating)) {
@@ -103,6 +107,7 @@ googleReviews.get(
     if (dateToIso) {
       query = query.lte("publishTime", dateToIso);
     }
+    query = query.eq("organisation_id", organisation_id);
 
     const { data, error, count } = await query
       .order("publishTime", { ascending: false })
@@ -114,11 +119,11 @@ googleReviews.get(
       ? data.map((row: any) => ({
           ...row,
           GoogleReviewText: Array.isArray(row.GoogleReviewText)
-            ? row.GoogleReviewText[0] ?? null
-            : row.GoogleReviewText ?? null,
+            ? (row.GoogleReviewText[0] ?? null)
+            : (row.GoogleReviewText ?? null),
           GoogleAuthorAttribution: Array.isArray(row.GoogleAuthorAttribution)
-            ? row.GoogleAuthorAttribution[0] ?? null
-            : row.GoogleAuthorAttribution ?? null,
+            ? (row.GoogleAuthorAttribution[0] ?? null)
+            : (row.GoogleAuthorAttribution ?? null),
         }))
       : [];
 
@@ -137,7 +142,7 @@ googleReviews.get(
         dateTo: dateToIso ?? null,
       },
     });
-  }
+  },
 );
 
 // Fetch from Google, upsert children, then upsert parent with FKs
@@ -151,12 +156,14 @@ googleReviews.post(
   }),
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     if (!GOOGLE_PLACES_API_KEY || !placeId) {
       return c.json(
         {
           error: "Missing GOOGLE_PLACES_API_KEY or DIVA_SALON_GOOGLE_PLACE_ID",
         },
-        500
+        500,
       );
     }
 
@@ -171,7 +178,7 @@ googleReviews.post(
             error:
               errorData?.message || `Google Places error ${response.status}`,
           },
-          502
+          502,
         );
       }
 
@@ -193,11 +200,12 @@ googleReviews.post(
             const { count, error: existsError } = await supabase
               .from("GooglePlaceReview")
               .select("name", { count: "exact", head: true })
-              .eq("name", review.name);
+              .eq("name", review.name)
+              .eq("organisation_id", organisation_id);
 
             if (existsError) {
               throw new Error(
-                `Failed to check existing review: ${existsError.message}`
+                `Failed to check existing review: ${existsError.message}`,
               );
             }
             if (count && count > 0) {
@@ -212,13 +220,14 @@ googleReviews.post(
                 publishTime: review.publishTime,
                 flagContentUri: review.flagContentUri,
                 googleMapsUri: review.googleMapsUri,
+                organisation_id: organisation_id,
               })
               .select("id")
               .single();
 
             if (!reviewId || reviewError) {
               throw new Error(
-                `Failed to upsert review: ${reviewError?.message || "unknown"}`
+                `Failed to upsert review: ${reviewError?.message || "unknown"}`,
               );
             }
 
@@ -229,13 +238,14 @@ googleReviews.post(
                   text: text?.text,
                   languageCode: text?.languageCode,
                   GooglePlaceReviewId: reviewId.id,
+                  organisation_id: organisation_id,
                 })
                 .select("id")
                 .single();
 
               if (reviewTextError) {
                 throw new Error(
-                  `Failed to upsert review text: ${reviewTextError.message}`
+                  `Failed to upsert review text: ${reviewTextError.message}`,
                 );
               }
             }
@@ -252,13 +262,14 @@ googleReviews.post(
                   uri: authorAttribution?.uri,
                   photoUri: authorAttribution?.photoUri,
                   GooglePlaceReviewId: reviewId.id,
+                  organisation_id: organisation_id,
                 })
                 .select("id")
                 .single();
 
               if (authorAttributionError) {
                 throw new Error(
-                  `Failed to upsert author attribution: ${authorAttributionError.message}`
+                  `Failed to upsert author attribution: ${authorAttributionError.message}`,
                 );
               }
             }
@@ -272,7 +283,7 @@ googleReviews.post(
               error: err?.message || String(err),
             };
           }
-        })
+        }),
       );
 
       // Invalidate caches
@@ -292,10 +303,10 @@ googleReviews.post(
     } catch (e: any) {
       return c.json(
         { error: e?.message || "Failed to fetch or store reviews" },
-        500
+        500,
       );
     }
-  }
+  },
 );
 
 export default googleReviews;
