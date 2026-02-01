@@ -260,11 +260,16 @@ webhooks.post("/clerk-webhook", async (c) => {
     }
 
     // 7️⃣ Other event types — mark as processed
-    await supabase.from("WebhookEvents").insert({
-      id: svixId,
-      type: event.type,
-      created_at: new Date().toISOString(),
-    });
+    if (
+      event.type !== "organizationInvitation.revoked" &&
+      event.type !== "organizationInvitation.accepted"
+    ) {
+      await supabase.from("WebhookEvents").insert({
+        id: svixId,
+        type: event.type,
+        created_at: new Date().toISOString(),
+      });
+    }
 
     if (event.type === "organizationMembership.deleted") {
       // Handle organization_member.deleted event if needed
@@ -337,6 +342,13 @@ webhooks.post("/clerk-webhook", async (c) => {
         console.error("Supabase update error:", error);
         return c.text("Database error", 500);
       }
+
+      await supabase.from("WebhookEvents").insert({
+        id: svixId,
+        type: event.type,
+        created_at: new Date().toISOString(),
+      });
+
       return c.json({
         message: "Organization invitation revoked event received",
       });
@@ -354,6 +366,13 @@ webhooks.post("/clerk-webhook", async (c) => {
         console.error("Supabase update error:", error);
         return c.text("Database error", 500);
       }
+
+      await supabase.from("WebhookEvents").insert({
+        id: svixId,
+        type: event.type,
+        created_at: new Date().toISOString(),
+      });
+
       return c.json({
         message: "Organization invitation accepted event received",
       });
