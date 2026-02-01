@@ -130,15 +130,27 @@ webhooks.post("/clerk-webhook", async (c) => {
         })
         .eq("clerk_id", user.id);
 
-      if (data) {
-        return c.json({ message: "Staff member updated", staff: data });
-      }
-
       if (error) {
         console.error("Supabase update error:", error);
         return c.text("Database error", 500);
       }
 
+      const { error: webhookEventError } = await supabase
+        .from("WebhookEvents")
+        .insert({
+          event_id: event.id,
+          event_type: event.type,
+          processed_at: new Date().toISOString(),
+        });
+
+      if (webhookEventError) {
+        console.error("Supabase WebhookEvents insert error:", webhookEventError);
+        return c.text("Database error", 500);
+      }
+
+      if (data) {
+        return c.json({ message: "Staff member updated", staff: data });
+      }
       return c.json({ message: "User updated event received" });
     }
 
