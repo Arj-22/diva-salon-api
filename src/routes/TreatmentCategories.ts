@@ -42,10 +42,12 @@ treatmentCategories.get(
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 21);
       const active = c.req.query("active") || "";
+      const organisation_id = c.get("organisation_id");
       return buildCacheKey("treatmentCategories", {
         page,
         per,
         active,
+        organisation_id,
       });
     },
     ttlSeconds: 300,
@@ -53,6 +55,8 @@ treatmentCategories.get(
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const { page, perPage, start, end } = parsePagination(c);
     const activeFilter = parseActiveFilter(c);
 
@@ -63,6 +67,7 @@ treatmentCategories.get(
     if (typeof activeFilter === "boolean") {
       query = query.eq("showOnWeb", activeFilter);
     }
+    query = query.eq("organisation_id", organisation_id);
 
     const { data, error, count } = await query.range(start, end);
 
@@ -81,38 +86,41 @@ treatmentCategories.get(
         totalPages,
       },
     });
-  }
+  },
 );
 
-treatmentCategories.get("namesWithIds", async (c) => {
-  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+// treatmentCategories.get("namesWithIds", async (c) => {
+//   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
-  const { data, error } = await supabase
-    .from("TreatmentCategory")
-    .select("id, name")
-    .order("name", { ascending: true });
+//   const { data, error } = await supabase
+//     .from("TreatmentCategory")
+//     .select("id, name")
+//     .order("name", { ascending: true });
 
-  if (error) return c.json({ error: error.message }, 500);
+//   if (error) return c.json({ error: error.message }, 500);
 
-  return c.json({ treatmentCategories: data || [] });
-});
+//   return c.json({ treatmentCategories: data || [] });
+// });
 treatmentCategories.get(
   "/activeSlugs",
   cacheResponse({
-    key: () =>
+    key: (c) =>
       buildCacheKey("treatmentCategories", {
         route: "activeSlugs",
+        organisation_id: c.get("organisation_id"),
       }),
     ttlSeconds: 300,
   }),
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const { data, error } = await supabase
       .from("TreatmentCategory")
       .select("href")
-      .eq("showOnWeb", true);
-
+      .eq("showOnWeb", true)
+      .eq("organisation_id", organisation_id);
     if (error) return c.json({ error: error.message }, 500);
 
     const slugs = Array.isArray(data)
@@ -120,7 +128,7 @@ treatmentCategories.get(
       : [];
 
     return c.json({ slugs });
-  }
+  },
 );
 
 treatmentCategories.get(
@@ -130,25 +138,31 @@ treatmentCategories.get(
       buildCacheKey("treatmentCategories", {
         route: "byId",
         id: c.req.param("id"),
+        organisation_id: c.get("organisation_id"),
       }),
     ttlSeconds: 300,
   }),
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const id = Number(c.req.param("id"));
     const { data, error } = await supabase
       .from("TreatmentCategory")
       .select("*")
       .eq("id", id)
+      .eq("organisation_id", organisation_id)
       .single();
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ treatmentCategory: data });
-  }
+  },
 );
 
 treatmentCategories.post("/", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
   const body = await c.req.json();
 
   const parsed = await TreatmentCategoryInsertSchema.safeParseAsync(body);
@@ -158,7 +172,10 @@ treatmentCategories.post("/", async (c) => {
 
   const { data, error } = await supabase
     .from("TreatmentCategory")
-    .insert(parsed.data)
+    .insert({
+      ...parsed.data,
+      organisation_id: organisation_id,
+    })
     .select()
     .single();
   if (error) return c.json({ error: error.message }, 500);
@@ -169,6 +186,8 @@ treatmentCategories.post("/", async (c) => {
 
 treatmentCategories.patch("/:id{[0-9]+}", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
   const body = await c.req.json();
 
   const parsed = await TreatmentCategoryUpdateSchema.safeParseAsync(body);
@@ -180,6 +199,7 @@ treatmentCategories.patch("/:id{[0-9]+}", async (c) => {
     .from("TreatmentCategory")
     .update(parsed.data)
     .eq("id", Number(c.req.param("id")))
+    .eq("organisation_id", organisation_id)
     .select()
     .single();
   if (error) return c.json({ error: error.message }, 500);
@@ -193,9 +213,12 @@ treatmentCategories.patch("/:id{[0-9]+}", async (c) => {
 
 treatmentCategories.post("/createCategoriesForEposCategories", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
   const { data: eposCategories, error: eposError } = await supabase
     .from("EposNowCategory")
-    .select("*");
+    .select("*")
+    .eq("organisation_id", organisation_id);
 
   if (eposError) {
     return c.json({ error: eposError.message }, 500);
@@ -209,16 +232,17 @@ treatmentCategories.post("/createCategoriesForEposCategories", async (c) => {
   // Fetch all existing category IDs at once
   const { data: existingCats, error: existingCatsError } = await supabase
     .from("TreatmentCategory")
-    .select("eposNowCategoryId");
+    .select("eposNowCategoryId")
+    .eq("organisation_id", organisation_id);
   if (existingCatsError) {
     return c.json({ error: existingCatsError.message }, 500);
   }
   const existingCatIds = new Set(
-    existingCats?.map((c) => c.eposNowCategoryId) || []
+    existingCats?.map((c) => c.eposNowCategoryId) || [],
   );
   // Filter categories that do not already exist
   const categoriesToCreate = eposCategories.filter(
-    (eposCat) => !existingCatIds.has(eposCat.CategoryIdEpos)
+    (eposCat) => !existingCatIds.has(eposCat.CategoryIdEpos),
   );
   for (const eposCat of categoriesToCreate) {
     const { data: newCat, error: insertError } = await supabase
@@ -228,6 +252,7 @@ treatmentCategories.post("/createCategoriesForEposCategories", async (c) => {
         description: eposCat.Description,
         eposNowCategoryId: eposCat.CategoryIdEpos,
         imageUrl: eposCat.ImageUrl,
+        organisation_id: organisation_id,
       })
       .select()
       .single();

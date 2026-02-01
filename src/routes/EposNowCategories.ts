@@ -25,20 +25,25 @@ eposNowCategories.get(
     key: (c) => {
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+      const organisation_id = c.get("organisation_id");
       return buildCacheKey("eposNowCategories", {
         page,
         per,
+        organisation_id,
       });
     },
     ttlSeconds: 300,
   }),
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
 
     const { page, perPage, start, end } = parsePagination(c);
     const { data, error, count } = await supabase
       .from("EposNowCategory")
       .select("*", { count: "exact" })
+      .eq("organisation_id", organisation_id)
       .range(start, end);
 
     if (error) return c.json({ error: error.message }, 500);
@@ -56,7 +61,7 @@ eposNowCategories.get(
         totalPages,
       },
     });
-  }
+  },
 );
 
 eposNowCategories.post("/insertNewCategories", async (c) => {
@@ -75,7 +80,7 @@ eposNowCategories.post("/insertNewCategories", async (c) => {
     const text = res ? await res.text().catch(() => "") : "";
     return c.json(
       { error: "Failed to fetch treatments from Epos Now", details: text },
-      500
+      500,
     );
   }
 
@@ -108,14 +113,14 @@ eposNowCategories.post("/insertNewCategories", async (c) => {
         error: "Failed to fetch existing category IDs",
         details: categoryIdError.message,
       },
-      500
+      500,
     );
   }
 
   const categoryIdsList = categoryIds?.map((cat) => cat.CategoryIdEpos) || [];
 
   const categoriesToInsert = payloads.filter(
-    (cat) => !categoryIdsList.includes(cat.CategoryIdEpos)
+    (cat) => !categoryIdsList.includes(cat.CategoryIdEpos),
   );
 
   if (categoriesToInsert.length === 0) {
@@ -130,7 +135,7 @@ eposNowCategories.post("/insertNewCategories", async (c) => {
   if (upsertError) {
     return c.json(
       { error: "Failed to upsert categories", details: upsertError.message },
-      500
+      500,
     );
   }
   return c.json({
