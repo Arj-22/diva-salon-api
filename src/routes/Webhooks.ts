@@ -320,6 +320,9 @@ webhooks.post("/clerk-webhook", async (c) => {
       if (data) {
         console.log("Invitation logged in database:", data);
       }
+      return c.json({
+        message: "Organization invitation created event received",
+      });
     }
 
     if (event.type === "organizationInvitation.revoked") {
