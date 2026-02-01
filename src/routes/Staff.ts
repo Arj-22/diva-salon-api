@@ -3,6 +3,7 @@ import { verifyWebhook } from "@clerk/backend/webhooks";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { buildCacheKey, cacheResponse } from "../lib/cache-middleware.js";
+import { parsePagination } from "../../utils/helpers.js";
 
 const staff = new Hono();
 
@@ -39,23 +40,65 @@ staff.get(
     if (!supabase) return c.text("Supabase not configured", 500);
     //@ts-ignore
     const organisation_id = c.get("organisation_id");
+    const { page, perPage, start, end } = parsePagination(c);
     try {
-      const { data: staffData, error } = await supabase
+      const { data, error, count } = await supabase
         .from("Staff")
-        .select("*")
-        .eq("organisation_id", organisation_id);
+        .select("*", { count: "exact" })
+        .eq("organisation_id", organisation_id)
+        .range(start, end);
 
       if (error) {
         console.error("Error fetching staff data:", error);
         return c.json({ error: "Failed to fetch staff data" }, 500);
       }
 
-      return c.json({ staff: staffData }, 200);
+      const items = Array.isArray(data) ? data : [];
+      const total = typeof count === "number" ? count : items.length;
+      const totalPages = perPage > 0 ? Math.ceil(total / perPage) : 0;
+      return c.json(
+        {
+          staff: data,
+          meta: {
+            total,
+            page,
+            perPage,
+            totalPages,
+          },
+        },
+        200,
+      );
     } catch (err) {
       console.error("Staff route error:", err);
       return c.json({ error: "Failed to fetch staff data" }, 500);
     }
   },
 );
+
+staff.get("/:id", async (c) => {
+  if (!supabase) return c.text("Supabase not configured", 500);
+  const id = c.req.param("id");
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
+
+  try {
+    const { data: staffMember, error } = await supabase
+      .from("Staff")
+      .select("*")
+      .eq("id", id)
+      .eq("organisation_id", organisation_id)
+      .single();
+
+    if (error) {
+      console.error("Error fetching staff member:", error);
+      return c.json({ error: "Failed to fetch staff member" }, 500);
+    }
+
+    return c.json({ staff: staffMember }, 200);
+  } catch (err) {
+    console.error("Staff member route error:", err);
+    return c.json({ error: "Failed to fetch staff member" }, 500);
+  }
+});
 
 export default staff;

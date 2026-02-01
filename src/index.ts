@@ -26,7 +26,9 @@ app.use(
     // Exclude health if you want it public:
     exclude: ["/health", "/webhooks"], // remove this line to protect /health too
   }),
-  organizationMiddleware(),
+  organizationMiddleware({
+    exclude: ["/webhooks", "/health"],
+  }),
 );
 
 app.route("/eposNowTreatments", eposNowTreatments);
@@ -41,12 +43,9 @@ app.route("/bookings", bookings);
 app.route("/formSubmissions", formSubmissions);
 app.route("/sendMail", email);
 app.route("/apiKeys", apiKeys);
-app.route("/health", health); // or just inline handler
+app.route("/health", health);
 app.route("/webhooks", webhooks);
 
-// app.get("/", (c) => {
-//   return c.text("Hello Hono!");
-// });
 serve(
   {
     fetch: app.fetch,

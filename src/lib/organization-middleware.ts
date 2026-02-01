@@ -15,6 +15,19 @@ const supabase =
     ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
     : null;
 
+type OrganizationMiddlewareOptions = {
+  exclude?: Array<string | RegExp>;
+};
+
+function isExcluded(pathname: string, excludes?: Array<string | RegExp>) {
+  if (!excludes || excludes.length === 0) return false;
+  for (const ex of excludes) {
+    if (typeof ex === "string" && pathname.startsWith(ex)) return true;
+    if (ex instanceof RegExp && ex.test(pathname)) return true;
+  }
+  return false;
+}
+
 /**
  * Middleware that fetches and sets the organization_id from the API key.
  * This should run after apiKeyAuth middleware.
@@ -22,8 +35,20 @@ const supabase =
  * Usage:
  *   app.use('/api/*', apiKeyAuth(), organizationMiddleware());
  */
-export function organizationMiddleware() {
+export function organizationMiddleware(
+  options: OrganizationMiddlewareOptions = {},
+) {
+  const { exclude = [] } = options;
   return async (c: Context, next: Next) => {
+    const url = new URL(
+      c.req.url,
+      `http://${c.req.header("host") || "localhost"}`,
+    );
+
+    if (isExcluded(url.pathname, exclude)) {
+      return next();
+    }
+
     if (!supabase) {
       return c.json({ error: "Database not configured" }, 500);
     }

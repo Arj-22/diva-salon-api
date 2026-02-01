@@ -182,3 +182,14 @@ export type Staff = {
   created_at: string; // ISO
   updated_at?: string | null;
 };
+
+export type CreateBookingPayload = {
+  organisation_id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  message?: string;
+  treatmentId: number | string;
+  appointmentStartTime: string;
+  staffId?: string | null;
+};

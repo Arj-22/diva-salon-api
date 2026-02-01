@@ -2,6 +2,11 @@ import { Hono } from "hono";
 import { verifyWebhook } from "@clerk/backend/webhooks";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
+import { cacheInvalidate } from "../lib/cache-middleware.js";
+import {
+  createHashedApiKey,
+  storeFullApiKeySecret,
+} from "../lib/hashApiKey.js";
 
 const webhooks = new Hono();
 
@@ -77,6 +82,8 @@ webhooks.post("/clerk-webhook", async (c) => {
         created_at: new Date().toISOString(),
       });
 
+      cacheInvalidate("staff:*");
+
       return c.json({ message: "Staff synced", staff: data });
     }
 
@@ -139,11 +146,31 @@ webhooks.post("/clerk-webhook", async (c) => {
         console.error("Supabase insert error:", error);
         return c.text("Database error", 500);
       }
+
+      const { keyId, fullKey, hashedKey } = await createHashedApiKey();
+      const { error: apiKeyError } = await supabase.from("ApiKeys").insert({
+        organisation_id: event.data.id,
+        keyId: keyId,
+        hashedKey: hashedKey,
+        created_at: new Date().toISOString(),
+      });
+
+      await storeFullApiKeySecret({
+        keyId: keyId,
+        fullKey: fullKey,
+      });
+
+      if (apiKeyError) {
+        console.error("Supabase ApiKey insert error:", apiKeyError);
+        return c.text("Database error", 500);
+      }
+
       return c.json({ message: "Organization created event received" });
     }
 
     if (event.type === "organization.deleted") {
       // Handle organization.deleted event if needed
+
       const { error } = await supabase
         .from("Business")
         .delete()

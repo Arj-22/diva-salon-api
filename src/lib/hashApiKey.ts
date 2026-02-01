@@ -233,3 +233,114 @@ export const verifyApiKey = async (apiKey: string) => {
 
   return { valid: true, organisationId: data.organisation_id };
 };
+
+const API_KEY_ENCRYPTION_KEY = process.env.API_KEY_ENCRYPTION_KEY ?? "";
+const ENCRYPTION_ALGO = "aes-256-gcm";
+const encryptionKeyBuffer =
+  API_KEY_ENCRYPTION_KEY.length > 0
+    ? Buffer.from(API_KEY_ENCRYPTION_KEY, "base64")
+    : null;
+
+function requireEncryptionKey() {
+  if (!encryptionKeyBuffer || encryptionKeyBuffer.length !== 32) {
+    throw new Error(
+      "API_KEY_ENCRYPTION_KEY must be a base64-encoded 32-byte key",
+    );
+  }
+  return encryptionKeyBuffer;
+}
+
+function encryptFullKey(fullKey: string) {
+  const key = requireEncryptionKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv(ENCRYPTION_ALGO, key, iv);
+  const ciphertext = Buffer.concat([
+    cipher.update(fullKey, "utf8"),
+    cipher.final(),
+  ]);
+  return {
+    ciphertext: ciphertext.toString("base64"),
+    iv: iv.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
+  };
+}
+
+function decryptFullKey(payload: {
+  ciphertext: string;
+  iv: string;
+  tag: string;
+}) {
+  const key = requireEncryptionKey();
+  const decipher = crypto.createDecipheriv(
+    ENCRYPTION_ALGO,
+    key,
+    Buffer.from(payload.iv, "base64"),
+  );
+  decipher.setAuthTag(Buffer.from(payload.tag, "base64"));
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(payload.ciphertext, "base64")),
+    decipher.final(),
+  ]);
+  return decrypted.toString("utf8");
+}
+
+export async function storeFullApiKeySecret(params: {
+  keyId: string;
+  fullKey: string;
+  ttlMs?: number | null;
+}) {
+  if (!supabase) throw new Error("Supabase client not configured");
+
+  const expiresAt =
+    params.ttlMs === undefined || params.ttlMs === null
+      ? null
+      : new Date(Date.now() + params.ttlMs).toISOString();
+  const encrypted = encryptFullKey(params.fullKey);
+
+  const { error } = await supabase.from("ApiKeySecrets").insert({
+    keyId: params.keyId,
+    ciphertext: encrypted.ciphertext,
+    iv: encrypted.iv,
+    tag: encrypted.tag,
+    created_at: new Date().toISOString(),
+    expires_at: expiresAt,
+  });
+
+  if (error) {
+    console.error("storeFullApiKeySecret: Supabase insert error:", error);
+    throw new Error(`Failed to store API key secret: ${error.message}`);
+  }
+  return { expiresAt };
+}
+
+export async function retrieveFullApiKeySecret(keyId: string, consume = false) {
+  if (!supabase) throw new Error("Supabase client not configured");
+
+  const { data, error } = await supabase
+    .from("ApiKeySecrets")
+    .select("ciphertext, iv, tag, expires_at")
+    .eq("keyId", keyId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed to load API key secret: ${error.message}`);
+  if (!data) {
+    return null;
+  }
+
+  if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) {
+    await supabase.from("ApiKeySecrets").delete().eq("keyId", keyId);
+    return null;
+  }
+
+  const fullKey = decryptFullKey({
+    ciphertext: data.ciphertext,
+    iv: data.iv,
+    tag: data.tag,
+  });
+
+  if (consume) {
+    await supabase.from("ApiKeySecrets").delete().eq("keyId", keyId);
+  }
+
+  return { fullKey, expiresAt: data.expires_at };
+}

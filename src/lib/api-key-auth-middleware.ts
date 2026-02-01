@@ -15,7 +15,7 @@ function parseKey(
       ApiKeyAuthOptions,
       "headerName" | "queryParam" | "allowAuthorizationHeader"
     >
-  >
+  >,
 ) {
   const hdr = c.req.header(opts.headerName);
   if (hdr) return hdr.trim();
@@ -30,7 +30,7 @@ function parseKey(
 
   const url = new URL(
     c.req.url,
-    `http://${c.req.header("host") || "localhost"}`
+    `http://${c.req.header("host") || "localhost"}`,
   );
   const q = url.searchParams.get(opts.queryParam);
   if (q) return q.trim();
@@ -58,7 +58,7 @@ export function apiKeyAuth(options: ApiKeyAuthOptions = {}) {
   return async (c: Context, next: Next) => {
     const url = new URL(
       c.req.url,
-      `http://${c.req.header("host") || "localhost"}`
+      `http://${c.req.header("host") || "localhost"}`,
     );
     if (isExcluded(url.pathname, exclude)) {
       return next();
