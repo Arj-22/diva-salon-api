@@ -100,4 +100,86 @@ staff.get("/:id", async (c) => {
   }
 });
 
+staff.post("/inviteUser", async (c) => {
+  if (!supabase) return c.text("Supabase not configured", 500);
+  const userInviteData = await c.req.json();
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
+
+  const inviteUrl =
+    process.env.CLERK_BACKEND_API_URL +
+    "/organizations/" +
+    organisation_id +
+    "/invitations";
+
+  try {
+    const response = await fetch(inviteUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}`,
+      },
+      body: JSON.stringify(userInviteData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Error inviting staff member:", errorData);
+      return c.json({ error: "Failed to invite staff member" }, 500);
+    }
+
+    const responseData = await response.json();
+    return c.json(
+      { message: "Staff member invited successfully", data: responseData },
+      200,
+    );
+  } catch (err) {
+    console.error("Invite staff member error:", err);
+    return c.json({ error: "Failed to invite staff member" }, 500);
+  }
+});
+
+staff.post("/revokeInvitation", async (c) => {
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
+  const revokeData = await c.req.json();
+  const revokeUrl =
+    process.env.CLERK_BACKEN_API_URL +
+    "/organizations/" +
+    organisation_id +
+    "/invitations/" +
+    revokeData.invitation_id +
+    "/revoke";
+
+  const requesting_user_id = revokeData.requesting_user_id;
+  try {
+    const response = await fetch(revokeUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}`,
+      },
+      body: JSON.stringify({ requesting_user_id }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Error revoking staff member invitation:", errorData);
+      return c.json({ error: "Failed to revoke staff member invitation" }, 500);
+    }
+
+    const responseData = await response.json();
+    return c.json(
+      {
+        message: "Staff member invitation revoked successfully",
+        data: responseData,
+      },
+      200,
+    );
+  } catch (err) {
+    console.error("Revoke staff member invitation error:", err);
+    return c.json({ error: "Failed to revoke staff member invitation" }, 500);
+  }
+});
+
 export default staff;
