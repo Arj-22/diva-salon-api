@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { verifyWebhook } from "@clerk/backend/webhooks";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { buildCacheKey, cacheResponse } from "../lib/cache-middleware.js";
