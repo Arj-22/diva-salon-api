@@ -109,6 +109,14 @@ webhooks.post("/clerk-webhook", async (c) => {
         return c.text("Database error", 500);
       }
 
+      const { error: webhookInsertError } = await supabase
+        .from("WebhookEvents")
+        .insert({ id: svixId });
+
+      if (webhookInsertError) {
+        console.error("Supabase webhook insert error:", webhookInsertError);
+        return c.text("Database error", 500);
+      }
       return c.json({ message: "Staff member deleted" });
     }
 
