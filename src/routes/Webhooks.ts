@@ -300,6 +300,61 @@ webhooks.post("/clerk-webhook", async (c) => {
       return c.json({ message: "Organization member updated event received" });
     }
 
+    if (event.type === "organizationInvitation.created") {
+      const invData = event.data;
+      const { data, error } = await supabase.from("Invitations").insert({
+        invitation_id: invData.id,
+        // inviter_id: invData.inviter_id,
+        organisation_id: invData.organization_id,
+        role_name: invData.role_name,
+        email_address: invData.email_address,
+        status: invData.status,
+        url: invData.url,
+        expires_at: new Date(invData.expires_at).toISOString(),
+      });
+
+      if (error) {
+        console.error("Error logging invitation in database:", error);
+        // Not returning here, as the invitation was successful
+      }
+      if (data) {
+        console.log("Invitation logged in database:", data);
+      }
+    }
+
+    if (event.type === "organizationInvitation.revoked") {
+      const { error } = await supabase
+        .from("Invitations")
+        .update({
+          status: event.data.status,
+        })
+        .eq("invitation_id", event.data.id);
+
+      if (error) {
+        console.error("Supabase update error:", error);
+        return c.text("Database error", 500);
+      }
+      return c.json({
+        message: "Organization invitation revoked event received",
+      });
+    }
+
+    if (event.type === "organizationInvitation.accepted") {
+      const { error } = await supabase
+        .from("Invitations")
+        .update({
+          status: event.data.status,
+        })
+        .eq("invitation_id", event.data.id);
+
+      if (error) {
+        console.error("Supabase update error:", error);
+        return c.text("Database error", 500);
+      }
+      return c.json({
+        message: "Organization invitation accepted event received",
+      });
+    }
     return c.json({ message: "Event type not handled" });
   } catch (err) {
     console.error("Webhook verification or processing failed:", err);
