@@ -300,12 +300,6 @@ webhooks.post("/clerk-webhook", async (c) => {
       return c.json({ message: "Organization member updated event received" });
     }
 
-    await supabase.from("WebhookEvents").insert({
-      id: svixId,
-      type: event.type,
-      created_at: new Date().toISOString(),
-    });
-
     return c.json({ message: "Event type not handled" });
   } catch (err) {
     console.error("Webhook verification or processing failed:", err);
