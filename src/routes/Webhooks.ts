@@ -75,15 +75,24 @@ webhooks.post("/clerk-webhook", async (c) => {
         return c.text("DB error", 500);
       }
 
-      // 5️⃣ Mark this webhook as processed
-      await supabase.from("WebhookEvents").insert({
-        id: svixId,
-        type: event.type,
-        created_at: new Date().toISOString(),
-      });
-
       cacheInvalidate("staff:*");
 
+      // 5️⃣ Mark this webhook as processed (after successful handling)
+      const { error: webhookInsertError } = await supabase
+        .from("WebhookEvents")
+        .insert({
+          id: svixId,
+          type: event.type,
+          created_at: new Date().toISOString(),
+        });
+
+      if (webhookInsertError) {
+        console.error(
+          "Supabase webhook event insert error:",
+          webhookInsertError,
+        );
+        return c.text("DB error", 500);
+      }
       return c.json({ message: "Staff synced", staff: data });
     }
 
