@@ -107,7 +107,7 @@ staff.post("/inviteUser", async (c) => {
   const organisation_id = c.get("organisation_id");
 
   const inviteUrl =
-    process.env.CLERK_BACKEN_API_URL +
+    process.env.CLERK_BACKEND_API_URL +
     "/organizations/" +
     organisation_id +
     "/invitations";
