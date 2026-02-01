@@ -89,18 +89,22 @@ treatmentCategories.get(
   },
 );
 
-// treatmentCategories.get("namesWithIds", async (c) => {
-//   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+treatmentCategories.get("namesWithIds", async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
-//   const { data, error } = await supabase
-//     .from("TreatmentCategory")
-//     .select("id, name")
-//     .order("name", { ascending: true });
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
 
-//   if (error) return c.json({ error: error.message }, 500);
+  const { data, error } = await supabase
+    .from("TreatmentCategory")
+    .select("id, name")
+    .eq("organisation_id", organisation_id)
+    .order("name", { ascending: true });
 
-//   return c.json({ treatmentCategories: data || [] });
-// });
+  if (error) return c.json({ error: error.message }, 500);
+
+  return c.json({ treatmentCategories: data || [] });
+});
 treatmentCategories.get(
   "/activeSlugs",
   cacheResponse({
