@@ -165,24 +165,20 @@ apiKeys.get("/plaintext", apiKeyAuth(), async (c) => {
     return c.json({ error: error.message }, { status: 500 });
   }
 
-  const keys: Array<{
-    keyId: string;
-    fullKey: string;
-    expiresAt: string;
-  }> = [];
+  const keys = await Promise.all(
+    (data ?? []).map(async ({ keyId }) => {
+      const secret = await retrieveFullApiKeySecret(keyId, false);
+      return secret
+        ? {
+            keyId,
+            fullKey: secret.fullKey,
+            expiresAt: secret.expiresAt,
+          }
+        : null;
+    }),
+  );
 
-  for (const row of data ?? []) {
-    const secret = await retrieveFullApiKeySecret(row.keyId, false);
-    if (secret) {
-      keys.push({
-        keyId: row.keyId,
-        fullKey: secret.fullKey,
-        expiresAt: secret.expiresAt,
-      });
-    }
-  }
-
-  return c.json({ keys });
+  return c.json({ keys: keys.filter(Boolean) });
 });
 
 export default apiKeys;
