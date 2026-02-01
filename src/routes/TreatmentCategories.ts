@@ -217,7 +217,8 @@ treatmentCategories.post("/createCategoriesForEposCategories", async (c) => {
   const organisation_id = c.get("organisation_id");
   const { data: eposCategories, error: eposError } = await supabase
     .from("EposNowCategory")
-    .select("*");
+    .select("*")
+    .eq("organisation_id", organisation_id);
 
   if (eposError) {
     return c.json({ error: eposError.message }, 500);
