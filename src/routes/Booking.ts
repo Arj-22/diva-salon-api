@@ -108,6 +108,7 @@ bookings.get(
       const clientId = c.req.query("clientId");
       const appointmentDate = c.req.query("appointmentDate");
       const organisationId = c.get("organisation_id");
+      const staffId = c.req.query("staffId");
 
       return buildCacheKey("bookings", {
         page,
@@ -116,6 +117,7 @@ bookings.get(
         clientId,
         appointmentDate,
         organisationId,
+        staffId,
       });
     },
     ttlSeconds: 300,
@@ -126,6 +128,7 @@ bookings.get(
     const status = c.req.query("status");
     const clientId = c.req.query("clientId");
     const appointmentDate = c.req.query("appointmentDate");
+    const staffId = Number(c.req.query("staffId"));
     const { page, perPage, start, end } = parsePagination(c);
     //@ts-ignore
     const organisation_id = c.get("organisation_id");
@@ -133,7 +136,7 @@ bookings.get(
     let query = supabase
       .from("Booking")
       .select(
-        `*, Client (id, name, email, phoneNumber), Treatment(*, EposNowTreatment(Name, SalePriceIncTax)) `,
+        `*, Client (id, name, email, phoneNumber), Treatment(*, EposNowTreatment(Name, SalePriceIncTax)), Staff(id, first_name)  `,
         { count: "exact" },
       )
       .order("created_at", { ascending: false })
@@ -148,6 +151,9 @@ bookings.get(
     }
     if (organisation_id) {
       query = query.eq("organisation_id", organisation_id);
+    }
+    if (staffId && staffId > 0) {
+      query = query.eq("staffId", staffId);
     }
     if (appointmentDate) {
       const dateStart = new Date(appointmentDate);
@@ -185,6 +191,7 @@ bookings.get(
       treatment: booking.Treatment,
       created_at: booking.created_at,
       client: booking.Client,
+      staff: booking.Staff,
     }));
 
     return c.json({

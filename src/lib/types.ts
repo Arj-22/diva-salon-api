@@ -193,3 +193,16 @@ export type CreateBookingPayload = {
   appointmentStartTime: string;
   staffId?: string | null;
 };
+
+export type ClerkOrganizationInvitation = {
+  invitation_id: string;
+  email_address: string;
+  role_name: string;
+  organization_id: string;
+  status: string;
+  url: string;
+  expires_at: number;
+  created_at: number;
+  updated_at: number;
+  inviter_id: string;
+};
