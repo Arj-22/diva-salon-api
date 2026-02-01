@@ -11,14 +11,12 @@ import {
   cacheResponse,
 } from "../lib/cache-middleware.js";
 import { hcaptchaVerify } from "../lib/hcaptcha-middleware.js";
-import { sendEmail } from "../lib/mailer.js";
-import { bookingConfirmationTemplate } from "../../utils/emailTemplates/bookingConfirmation.js";
 import {
   combineDateAndTime,
   overlaps,
   parsePagination,
 } from "../../utils/helpers.js";
-import type { EposNowTreatment } from "../lib/types.js";
+import { createBookingRecord } from "../lib/bookingActions.js";
 
 const bookings = new Hono();
 config({ path: ".env" });
@@ -33,6 +31,8 @@ const supabase =
     ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
     : null;
 
+const ADMIN_BOOKING_SECRET = process.env.ADMIN_BOOKING_SECRET;
+
 bookings.post(
   "/",
   hcaptchaVerify({ bodyField: "hcaptcha_token" }),
@@ -40,200 +40,38 @@ bookings.post(
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
-    // Use validated booking data (avoid re-parsing)
-    const res = await c.req.json();
-    const bookingData = {
-      name: res.name,
-      email: res.email,
-      phone: res.phone,
-      message: res.message,
-      treatmentId: res.treatmentId,
-      appointmentStartTime: res.appointmentStartTime,
-    };
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
 
-    // Find or create client
-    const emailLower = bookingData.email?.toLowerCase().trim();
-    let clientRow: {
-      id: number;
-      name: string;
-      email: string | null;
-      phoneNumber: string | null;
-    } | null = null;
-    let newClientCreated = false;
-
-    if (emailLower) {
-      const { data: existingByEmail, error: findEmailError } = await supabase
-        .from("Client")
-        .select("id,name,email,phoneNumber")
-        .eq("email", emailLower)
-        .limit(1)
-        .maybeSingle();
-
-      if (findEmailError) {
-        return c.json(
-          {
-            error: "Failed to query client by email",
-            details: findEmailError.message,
-          },
-          500,
-        );
-      }
-
-      if (existingByEmail) {
-        clientRow = existingByEmail;
-      }
-    }
-
-    // Optional fallback: if no email or not found, try phone match
-    if (!clientRow && bookingData.phone) {
-      const phoneNorm = bookingData.phone.trim();
-      const { data: existingByPhone, error: findPhoneError } = await supabase
-        .from("Client")
-        .select("id,name,email,phoneNumber")
-        .eq("phoneNumber", phoneNorm)
-        .limit(1)
-        .maybeSingle();
-
-      if (findPhoneError) {
-        return c.json(
-          {
-            error: "Failed to query client by phone",
-            details: findPhoneError.message,
-          },
-          500,
-        );
-      }
-
-      if (existingByPhone) {
-        clientRow = existingByPhone;
-      }
-    }
-
-    if (!clientRow) {
-      const { data: createdClient, error: createClientError } = await supabase
-        .from("Client")
-        .insert({
-          name: bookingData.name,
-          email: emailLower || null,
-          phoneNumber: bookingData.phone?.trim() || null,
-        })
-        .select("id,name,email,phoneNumber")
-        .single();
-      if (createClientError || !createdClient) {
-        return c.json(
-          {
-            error: "Failed to create client",
-            details: createClientError?.message,
-          },
-          500,
-        );
-      }
-      clientRow = createdClient;
-      newClientCreated = true;
-    }
-
-    const appointmentStart = new Date(bookingData.appointmentStartTime);
-
-    const { data: conflictingBooking, error: conflictCheckError } =
-      await supabase
-        .from("Booking")
-        .select("id")
-        .eq("appointmentStartTime", bookingData.appointmentStartTime)
-        .maybeSingle();
-
-    if (conflictCheckError) {
-      return c.json(
-        {
-          error: "Failed to verify booking availability",
-          details: conflictCheckError.message,
-        },
-        500,
-      );
-    }
-
-    if (conflictingBooking) {
-      return c.json(
-        { error: "This appointment start time is already booked" },
-        409,
-      );
-    }
-
-    const treatmentDurationMinutes = await supabase
-      .from("Treatment")
-      .select("durationInMinutes")
-      .eq("id", bookingData.treatmentId)
-      .single();
-    const appointmentEndTime = new Date(
-      appointmentStart.getTime() +
-        treatmentDurationMinutes.data?.durationInMinutes * 60000,
-    ).toISOString();
-    // Define booking payload now with real clientId
-    const bookingPayload = {
-      message: bookingData.message || null,
-      clientId: clientRow.id,
-      treatmentId: bookingData.treatmentId,
-      appointmentStartTime: bookingData.appointmentStartTime,
-      appointmentEndTime: appointmentEndTime,
-    };
-
-    const { data: bookingRow, error: bookingError } = await supabase
-      .from("Booking")
-      .insert(bookingPayload)
-      .select(
-        "id, message, clientId, treatmentId, appointmentStartTime, appointmentEndTime, Treatment (*, EposNowTreatment(Name, SalePriceIncTax))",
-      )
-      .single();
-
-    if (bookingError || !bookingRow) {
-      // Roll back newly created client if desired (best-effort)
-      if (newClientCreated) {
-        await supabase.from("Client").delete().eq("id", clientRow.id);
-      }
-      return c.json(
-        { error: "Failed to create booking", details: bookingError?.message },
-        500,
-      );
-    }
-
-    // Ensure the template receives a single EposNowTreatment object per item.
-    // @ts-ignore
-    const treatment: EposNowTreatment = bookingRow.Treatment.EposNowTreatment;
-
-    try {
-      await sendEmail({
-        to: [bookingData.email],
-        subject: "New Booking Created",
-        html: bookingConfirmationTemplate({
-          name: bookingData.name,
-          treatment: treatment,
-          message: bookingData.message,
-        }),
-      });
-    } catch (err) {
-      console.error("Error sending email:", err);
-      await supabase.from("Booking").delete().eq("id", bookingRow.id);
-      return c.json({ error: "Failed to send email" }, 500);
-    }
-    cacheInvalidate("bookings:*");
-    cacheInvalidate("availability:*");
-
-    return c.json(
-      {
-        message: "Booking created",
-        booking: {
-          id: bookingRow.id,
-          message: bookingRow.message,
-          client: clientRow,
-          treatmentId: bookingRow.treatmentId,
-          appointmentStartTime: bookingRow.appointmentStartTime,
-          appointmentEndTime: bookingRow.appointmentEndTime,
-          newClient: newClientCreated,
-        },
-      },
-      201,
-    );
+    const payload = await c.req.json();
+    return createBookingRecord(c, {
+      ...payload,
+      organisation_id,
+    });
   },
 );
+
+bookings.post("/admin", validateBooking(), async (c) => {
+  if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+  if (!ADMIN_BOOKING_SECRET) {
+    return c.json({ error: "Admin booking secret not configured" }, 500);
+  }
+  const provided = c.req.header("x-admin-booking-secret");
+  if (provided !== ADMIN_BOOKING_SECRET) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id") as string | undefined;
+  if (!organisation_id) {
+    return c.json({ error: "Missing organisation context" }, 400);
+  }
+  const payload = await c.req.json();
+  return createBookingRecord(c, {
+    ...payload,
+    organisation_id,
+  });
+});
 
 bookings.patch("/:bookingId{[0-9]+}", validateBookingUpdate(), async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
@@ -269,6 +107,7 @@ bookings.get(
       const status = c.req.query("status");
       const clientId = c.req.query("clientId");
       const appointmentDate = c.req.query("appointmentDate");
+      const organisationId = c.get("organisation_id");
 
       return buildCacheKey("bookings", {
         page,
@@ -276,6 +115,7 @@ bookings.get(
         status,
         clientId,
         appointmentDate,
+        organisationId,
       });
     },
     ttlSeconds: 300,
@@ -287,6 +127,8 @@ bookings.get(
     const clientId = c.req.query("clientId");
     const appointmentDate = c.req.query("appointmentDate");
     const { page, perPage, start, end } = parsePagination(c);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
 
     let query = supabase
       .from("Booking")
@@ -295,6 +137,7 @@ bookings.get(
         { count: "exact" },
       )
       .order("created_at", { ascending: false })
+
       .range(start, end);
 
     if (status && status !== "all") {
@@ -302,6 +145,9 @@ bookings.get(
     }
     if (clientId && clientId !== null) {
       query = query.eq("clientId", clientId);
+    }
+    if (organisation_id) {
+      query = query.eq("organisation_id", organisation_id);
     }
     if (appointmentDate) {
       const dateStart = new Date(appointmentDate);
@@ -355,6 +201,7 @@ bookings.get(
       buildCacheKey("bookings", {
         route: "byBookingId",
         bookingId: c.req.param("bookingId"),
+        organisation_id: c.get("organisation_id"),
       }),
     ttlSeconds: 300,
   }),
@@ -403,18 +250,23 @@ bookings.get(
     key: (c) => {
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+      const organisation_id = c.get("organisation_id");
 
       return buildCacheKey("bookings", {
         route: "byClientId",
         clientId: c.req.param("clientId"),
         page,
         per,
+        organisation_id,
       });
     },
     ttlSeconds: 300,
   }),
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
 
     const clientId = Number(c.req.param("clientId"));
     const { page, perPage, start, end } = parsePagination(c);
@@ -426,6 +278,7 @@ bookings.get(
         { count: "exact" },
       )
       .eq("clientId", clientId)
+      .eq("organisation_id", organisation_id)
       .order("created_at", { ascending: false })
       .range(start, end);
 
@@ -466,9 +319,11 @@ bookings.get(
     key: (c) => {
       const treatmentId = c.req.query("treatmentId");
       const date = c.req.query("date");
+      const organisation_id = c.get("organisation_id");
       return buildCacheKey("availability", {
         treatmentId,
         date,
+        organisation_id,
       });
     },
     ttlSeconds: 60,
@@ -485,12 +340,16 @@ bookings.get(
       return c.json({ error: "Supabase not configured" }, 500);
     }
 
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
+
     // 1️⃣ Get treatment duration
     const { data: treatment } = await supabase
       .from("Treatment")
       .select("durationInMinutes")
       .eq("id", treatmentId)
       .eq("showOnWeb", true)
+      .eq("organisation_id", organisation_id)
       .single();
 
     if (!treatment) {
@@ -506,6 +365,7 @@ bookings.get(
       .from("OpeningHours")
       .select("opens_at, closes_at")
       .eq("Day", dayOfWeek)
+      .eq("organisation_id", organisation_id)
       .single();
 
     if (!hours) {
@@ -523,7 +383,8 @@ bookings.get(
       .select("appointmentStartTime, appointmentEndTime")
       // .neq("status", "cancelled")
       .gte("appointmentStartTime", dayStart.toISOString())
-      .lte("appointmentEndTime", dayEnd.toISOString());
+      .lte("appointmentEndTime", dayEnd.toISOString())
+      .eq("organisation_id", organisation_id);
 
     // 4️⃣ Generate slots
     const slots: string[] = [];

@@ -30,6 +30,9 @@ const supabase =
 clients.post("/", validateClient(), async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
+
   let body: unknown;
   try {
     body = await c.req.json();
@@ -48,6 +51,7 @@ clients.post("/", validateClient(), async (c) => {
     name: clientInput.name,
     email: clientInput.email ?? null,
     phoneNumber: clientInput.phoneNumber ?? null,
+    organisation_id: organisation_id,
   };
 
   const { data, error } = await supabase
@@ -63,7 +67,7 @@ clients.post("/", validateClient(), async (c) => {
         error: isConflict ? "Client already exists" : "Failed to create client",
         details: error?.message,
       },
-      isConflict ? 409 : 500
+      isConflict ? 409 : 500,
     );
   }
 
@@ -76,9 +80,11 @@ clients.get(
     key: (c) => {
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+      const organisation_id = c.get("organisation_id");
       return buildCacheKey("clients", {
         page,
         per,
+        organisation_id,
       });
     },
     ttlSeconds: 300,
@@ -86,11 +92,14 @@ clients.get(
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const { page, perPage, start, end } = parsePagination(c);
 
     const { data, error, count } = await supabase
       .from("Client")
       .select("*", { count: "exact" })
+      .eq("organisation_id", organisation_id)
       .range(start, end);
 
     if (error) return c.json({ error: error.message }, 500);
@@ -108,7 +117,7 @@ clients.get(
         totalPages,
       },
     });
-  }
+  },
 );
 
 clients.get("/:id", async (c) => {
@@ -117,10 +126,15 @@ clients.get("/:id", async (c) => {
   const id = c.req.param("id");
   if (!id) return c.json({ error: "Client ID is required" }, 400);
 
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
+
   const { data, error } = await supabase
     .from("Client")
     .select("*")
     .eq("id", id)
+    //@ts-ignore
+    .eq("organisation_id", organisation_id)
     .single();
 
   if (error?.code === "PGRST116" || error?.message?.includes("No rows")) {
@@ -130,7 +144,7 @@ clients.get("/:id", async (c) => {
   if (error) {
     return c.json(
       { error: "Failed to fetch client", details: error.message },
-      500
+      500,
     );
   }
 
@@ -142,6 +156,9 @@ clients.patch("/:id", async (c) => {
 
   const id = c.req.param("id");
   if (!id) return c.json({ error: "Client ID is required" }, 400);
+
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
 
   let body: unknown;
   try {
@@ -178,6 +195,7 @@ clients.patch("/:id", async (c) => {
     .from("Client")
     .update(updates)
     .eq("id", id)
+    .eq("organisation_id", organisation_id)
     .select("*")
     .single();
 
@@ -188,7 +206,7 @@ clients.patch("/:id", async (c) => {
   if (error) {
     return c.json(
       { error: "Failed to update client", details: error.message },
-      500
+      500,
     );
   }
   cacheInvalidate(`clients:*`);

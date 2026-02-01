@@ -48,17 +48,21 @@ treatments.get(
       const per = Number(c.req.query("perPage") || c.req.query("per") || 21);
       const active = c.req.query("active") || "";
       const categoryId = c.req.query("categoryId") || "";
+      const organisation_id = c.get("organisation_id");
       return buildCacheKey("treatments", {
         page,
         per,
         active,
         categoryId,
+        organisation_id,
       });
     },
     ttlSeconds: 300,
   }),
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
 
     const { page, perPage, start, end } = parsePagination(c);
 
@@ -70,6 +74,7 @@ treatments.get(
         { count: "exact" },
       );
     if (typeof active === "boolean") query = query.eq("showOnWeb", active);
+    query = query.eq("organisation_id", organisation_id);
 
     if (
       c.req.query("categoryId") &&
@@ -96,6 +101,8 @@ treatments.get(
 treatments.get("/:id{[0-9]+}", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
   const idParam = c.req.param("id");
   const treatmentId = Number(idParam);
   if (isNaN(treatmentId)) {
@@ -108,6 +115,7 @@ treatments.get("/:id{[0-9]+}", async (c) => {
       `*, EposNowTreatment(Name, SalePriceExTax, SalePriceIncTax), TreatmentCategory(name, description), TreatmentSubCategory(name, description)`,
     )
     .eq("id", treatmentId)
+    .eq("organisation_id", organisation_id)
     .single();
 
   if (error) return c.json({ error: error.message }, 500);
@@ -123,11 +131,13 @@ treatments.get(
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
       const catActive = c.req.query("categoryActive") || "";
+      const organisation_id = c.get("organisation_id");
       return buildCacheKey("treatments", {
         route: "groupedByCategory",
         page,
         per,
         catActive,
+        organisation_id,
       });
     },
     ttlSeconds: 300,
@@ -138,6 +148,8 @@ treatments.get(
     const { page, perPage, start, end } = parsePagination(c);
 
     const catActive = parseCategoryActive(c);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     let query = supabase
       .from("Treatment")
       .select(
@@ -146,6 +158,7 @@ treatments.get(
       );
     if (typeof catActive === "boolean")
       query = query.eq("showOnWeb", catActive);
+    query = query.eq("organisation_id", organisation_id);
 
     const { data, error, count } = await query.range(start, end);
 
@@ -196,18 +209,22 @@ treatments.get(
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
       const catActive = c.req.query("categoryActive") || "";
+      const organisation_id = c.get("organisation_id");
       return buildCacheKey("treatments", {
         route: "byCategory",
         treatmentCategoryId: c.req.param("treatmentCategoryId"),
         page,
         per,
         catActive,
+        organisation_id,
       });
     },
     ttlSeconds: 300,
   }),
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
 
     const treatmentCategoryId = Number(c.req.param("treatmentCategoryId"));
     const { page, perPage, start, end } = parsePagination(c);
@@ -222,6 +239,8 @@ treatments.get(
       .eq("treatmentCategoryId", treatmentCategoryId);
     if (typeof catActive === "boolean")
       query = query.eq("showOnWeb", catActive);
+
+    query = query.eq("organisation_id", organisation_id);
 
     const { data, error, count } = await query.range(start, end);
 
@@ -246,12 +265,14 @@ treatments.get(
       const page = Number(c.req.query("page") || 1);
       const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
       const active = c.req.query("active") || "";
+      const organisation_id = c.get("organisation_id");
       return buildCacheKey("treatments", {
         route: "byCategorySlug",
         treatmentCategorySlug: c.req.param("treatmentCategorySlug"),
         page,
         per,
         active,
+        organisation_id,
       });
     },
     ttlSeconds: 300,
@@ -261,6 +282,8 @@ treatments.get(
 
     const { page, perPage, start, end } = parsePagination(c);
     const treatmentCategorySlug = c.req.param("treatmentCategorySlug");
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
 
     const active = parseActiveFlag(c);
     let query = supabase
@@ -277,6 +300,7 @@ treatments.get(
     if (typeof active === "boolean") {
       query = query.eq("showOnWeb", active);
     }
+    query = query.eq("organisation_id", organisation_id);
 
     const { data, error, count } = await query.range(start, end);
 
@@ -295,6 +319,8 @@ treatments.get(
 
 treatments.post("/", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
 
   const body = await c.req.json();
   const parsed = await TreatmentInsertSchema.safeParseAsync(body);
@@ -304,7 +330,7 @@ treatments.post("/", async (c) => {
 
   const { data, error } = await supabase
     .from("Treatment")
-    .insert(parsed.data)
+    .insert({ ...parsed.data, organisation_id })
     .select()
     .single();
 
@@ -316,10 +342,13 @@ treatments.post("/", async (c) => {
 
 treatments.post("/createForEposTreatments", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
 
   const { data: eposTreatments, error: eposError } = await supabase
     .from("EposNowTreatment")
-    .select("*");
+    .select("*")
+    .eq("organisation_id", organisation_id);
 
   if (eposError) {
     return c.json({ error: eposError.message }, 500);
@@ -330,7 +359,8 @@ treatments.post("/createForEposTreatments", async (c) => {
   // Fetch all existing eposNowTreatmentId values once
   const { data: existingTreatments, error: existingError } = await supabase
     .from("Treatment")
-    .select("eposNowTreatmentId");
+    .select("eposNowTreatmentId")
+    .eq("organisation_id", organisation_id);
 
   if (existingError) {
     return c.json({ error: existingError.message }, 500);
@@ -352,6 +382,7 @@ treatments.post("/createForEposTreatments", async (c) => {
         description: eposTreatment.Description,
         eposNowTreatmentId: eposTreatment.EposNowId,
         imageUrl: eposTreatment.ImageUrl ?? null,
+        organisation_id: organisation_id,
       })
       .select()
       .single();
@@ -374,6 +405,8 @@ treatments.post("/createForEposTreatments", async (c) => {
 
 treatments.patch("/:id{[0-9]+}", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
 
   const idParam = c.req.param("id");
   const treatmentId = Number(idParam);
@@ -390,7 +423,7 @@ treatments.patch("/:id{[0-9]+}", async (c) => {
 
   const { data, error } = await supabase
     .from("Treatment")
-    .update(parsed.data)
+    .update({ ...parsed.data, organisation_id })
     .eq("id", treatmentId)
     .select()
     .single();

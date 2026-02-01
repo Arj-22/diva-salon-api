@@ -8,6 +8,7 @@
     "start": "node dist/src/index.js"
   },
   "dependencies": {
+    "@clerk/backend": "^2.29.5",
     "@hono/node-server": "^1.19.6",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.81.1",
@@ -16,6 +17,8 @@
     "hono": "^4.10.4",
     "redis": "^5.9.0",
     "resend": "^6.4.2",
+    "svix": "^1.84.1",
+    "webhooks": "^0.0.4",
     "zod": "^4.1.12"
   },
   "devDependencies": {

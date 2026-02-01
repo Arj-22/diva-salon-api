@@ -34,6 +34,8 @@ formSubmissions.post(
   async (c) => {
     if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     let body: unknown;
     try {
       body = await c.req.json();
@@ -55,13 +57,14 @@ formSubmissions.post(
         .from("Client")
         .select("id,name,email,phoneNumber")
         .eq("email", submission.email)
+        .eq("organisation_id", organisation_id)
         .limit(1)
         .maybeSingle();
 
       if (error) {
         return c.json(
           { error: "Failed to lookup client by email", details: error.message },
-          500
+          500,
         );
       }
 
@@ -75,6 +78,7 @@ formSubmissions.post(
           name: submission.name,
           email: submission.email ?? null,
           phoneNumber: submission.phoneNumber ?? null,
+          organisation_id: organisation_id,
         })
         .select("id,name,email,phoneNumber")
         .single();
@@ -88,7 +92,7 @@ formSubmissions.post(
               : "Failed to create client",
             details: error?.message,
           },
-          isConflict ? 409 : 500
+          isConflict ? 409 : 500,
         );
       }
 
@@ -101,6 +105,7 @@ formSubmissions.post(
       .insert({
         clientId: clientRow.id,
         message: submission.message,
+        organisation_id: organisation_id,
       })
       .select("id,clientId,message,created_at")
       .single();
@@ -111,7 +116,7 @@ formSubmissions.post(
           error: "Failed to save form submission",
           details: formSubmissionError?.message,
         },
-        500
+        500,
       );
     }
 
@@ -121,9 +126,9 @@ formSubmissions.post(
         client: clientRow,
         newClient: newClientCreated,
       },
-      201
+      201,
     );
-  }
+  },
 );
 
 export default formSubmissions;
