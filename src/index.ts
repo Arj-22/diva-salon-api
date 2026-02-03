@@ -52,6 +52,8 @@ serve(
     port: process.env.PORT ? Number(process.env.PORT) : 3000,
   },
   (info) => {
-    console.log(`Server is running on http://localhost:${process.env.PORT}`);
+    console.log(
+      `Server is running on http://api.divasalonandacademy.co.uk:${process.env.PORT}`,
+    );
   },
 );
