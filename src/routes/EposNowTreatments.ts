@@ -215,6 +215,9 @@ eposNowTreatments.post("insertTreatmentsByEposCategory", async (c) => {
     return c.json({ error: "EPOS_NOW_URL not configured" }, 500);
   }
 
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
+
   const body = await c.req.json();
 
   const eposCategoryId = body.eposCategoryId;
@@ -260,6 +263,7 @@ eposNowTreatments.post("insertTreatmentsByEposCategory", async (c) => {
     SalePriceExTax: !t.IsSalePriceIncTax ? t.SalePrice : null,
     EposCategoryId: t.CategoryId ?? null,
     updated_at: new Date().toISOString(),
+    organisation_id,
   }));
 
   // Upsert in a single call using Name to determine conflicts
@@ -284,6 +288,8 @@ eposNowTreatments.post("insertTreatmentsByEposCategory", async (c) => {
 eposNowTreatments.post("/insertNewTreatments", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
   // fetch properly and check status
   const res = await fetch(EPOS_NOW_URL + "/Product", {
     method: "GET",
@@ -325,6 +331,7 @@ eposNowTreatments.post("/insertNewTreatments", async (c) => {
     SalePriceExTax: !t.IsSalePriceIncTax ? t.SalePrice : null,
     EposCategoryId: t.CategoryId ?? null,
     updated_at: new Date().toISOString(),
+    organisation_id,
   }));
 
   // Upsert in a single call using Name to determine conflicts

@@ -67,6 +67,9 @@ eposNowCategories.get(
 eposNowCategories.post("/insertNewCategories", async (c) => {
   if (!supabase) return c.json({ error: "Supabase not configured" }, 500);
 
+  //@ts-ignore
+  const organisation_id = c.get("organisation_id");
+
   // fetch properly and check status
   const res = await fetch(EPOS_NOW_URL + "/Category", {
     method: "GET",
@@ -99,6 +102,7 @@ eposNowCategories.post("/insertNewCategories", async (c) => {
     ParentId: cat.ParentId ?? null,
     RootParentId: cat.RootParentId ?? null,
     ShowOnTill: cat.ShowOnTill,
+    organisation_id,
     ImageUrl: cat.ImageUrl ?? null,
     updated_at: new Date().toISOString(),
   }));

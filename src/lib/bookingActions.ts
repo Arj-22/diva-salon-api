@@ -73,7 +73,7 @@ export async function createBookingRecord(
     const phoneNorm = bookingData.phone.trim();
     const { data: existingByPhone, error: findPhoneError } = await supabase
       .from("Client")
-      .select("id,name,email,phoneNumber")
+      .select("id,name,email,phoneNumber, organisation_id")
       .eq("phoneNumber", phoneNorm)
       .limit(1)
       .maybeSingle();
@@ -100,10 +100,12 @@ export async function createBookingRecord(
         name: bookingData.name,
         email: emailLower || null,
         phoneNumber: bookingData.phone?.trim() || null,
+        organisation_id: bookingData.organisation_id,
       })
       .select("id,name,email,phoneNumber")
       .single();
     if (createClientError || !createdClient) {
+      console.error("Error creating client:", createClientError);
       return c.json(
         {
           error: "Failed to create client",
@@ -181,6 +183,7 @@ export async function createBookingRecord(
     if (newClientCreated) {
       await supabase.from("Client").delete().eq("id", clientRow.id);
     }
+    console.error("Error creating booking:", bookingError);
     return c.json(
       { error: "Failed to create booking", details: bookingError?.message },
       500,

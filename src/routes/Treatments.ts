@@ -389,7 +389,7 @@ treatments.post("/createForEposTreatments", async (c) => {
 
     if (insertError) {
       console.error(
-        `Failed to create treatment for EposNowTreatment ID ${eposTreatment.Id}: ${insertError.message}`,
+        `Failed to create treatment for EposNowTreatment ID ${eposTreatment.id}: ${insertError.message}`,
       );
       continue;
     }
