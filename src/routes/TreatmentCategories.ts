@@ -62,12 +62,12 @@ treatmentCategories.get(
 
     let query = supabase
       .from("TreatmentCategory")
-      .select("*", { count: "exact" });
+      .select("*", { count: "exact" })
+      .eq("organisation_id", organisation_id);
 
     if (typeof activeFilter === "boolean") {
       query = query.eq("showOnWeb", activeFilter);
     }
-    query = query.eq("organisation_id", organisation_id);
 
     const { data, error, count } = await query.range(start, end);
 

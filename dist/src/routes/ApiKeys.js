@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { cacheResponse } from "../lib/cache-middleware.js";
-import { createHashedApiKey, parseFullKey } from "../lib/hashApiKey.js";
+import { createHashedApiKey, parseFullKey, storeFullApiKeySecret, retrieveFullApiKeySecret, } from "../lib/hashApiKey.js";
 import argon2 from "argon2";
 import { apiKeyAuth } from "../lib/api-key-auth-middleware.js";
 const apiKeys = new Hono();
@@ -12,13 +12,14 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBL
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
     ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
     : null;
+const ADMIN_API_KEY_EXPORT_SECRET = process.env.ADMIN_API_KEY_EXPORT_SECRET;
 apiKeys.get("/", apiKeyAuth(), cacheResponse({ ttlSeconds: 300 }), async (c) => {
     if (!supabase) {
         return c.json({ error: "Supabase client not configured" }, { status: 500 });
     }
     const { data, error } = await supabase
-        .from("api_keys")
-        .select("id, name, created_at")
+        .from("ApiKeys")
+        .select("id, hashedKey, created_at")
         .order("created_at", { ascending: false });
     if (error) {
         return c.json({ error: error.message }, { status: 500 });
@@ -29,6 +30,10 @@ apiKeys.post("/", apiKeyAuth(), async (c) => {
     if (!supabase) {
         return c.json({ error: "Supabase client not configured" }, { status: 500 });
     }
+    const body = await c.req.json();
+    if (!body.organisation_id) {
+        return c.json({ error: "organisation_id is required" }, { status: 400 });
+    }
     const { keyId, fullKey, hashedKey } = await createHashedApiKey();
     const { data, error } = await supabase
         .from("ApiKeys")
@@ -36,6 +41,7 @@ apiKeys.post("/", apiKeyAuth(), async (c) => {
         {
             keyId: keyId,
             hashedKey: hashedKey,
+            organisation_id: body.organisation_id,
         },
     ])
         .select()
@@ -46,6 +52,10 @@ apiKeys.post("/", apiKeyAuth(), async (c) => {
     if (!data) {
         return c.json({ error: "Failed to create API key" }, { status: 500 });
     }
+    await storeFullApiKeySecret({
+        keyId: keyId,
+        fullKey: fullKey,
+    });
     return c.json({
         message: "API key created successfully",
         apiKey: fullKey, // Return the full key only once
@@ -89,5 +99,32 @@ apiKeys.post("/verifyKey", apiKeyAuth(), async (c) => {
         return c.json({ valid: false, error: "invalid_key" }, { status: 401 });
     }
     return c.json({ valid: true });
+});
+apiKeys.get("/plaintext", apiKeyAuth(), async (c) => {
+    if (!supabase) {
+        return c.json({ error: "Supabase client not configured" }, { status: 500 });
+    }
+    if (!ADMIN_API_KEY_EXPORT_SECRET) {
+        return c.json({ error: "Export secret not configured" }, { status: 500 });
+    }
+    const provided = c.req.header("x-admin-export-secret");
+    if (provided !== ADMIN_API_KEY_EXPORT_SECRET) {
+        return c.json({ error: "Forbidden" }, { status: 403 });
+    }
+    const { data, error } = await supabase.from("ApiKeySecrets").select("keyId");
+    if (error) {
+        return c.json({ error: error.message }, { status: 500 });
+    }
+    const keys = await Promise.all((data ?? []).map(async ({ keyId }) => {
+        const secret = await retrieveFullApiKeySecret(keyId, false);
+        return secret
+            ? {
+                keyId,
+                fullKey: secret.fullKey,
+                expiresAt: secret.expiresAt,
+            }
+            : null;
+    }));
+    return c.json({ keys: keys.filter(Boolean) });
 });
 export default apiKeys;

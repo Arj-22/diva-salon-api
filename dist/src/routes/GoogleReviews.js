@@ -20,18 +20,22 @@ googleReviews.get("/", cacheResponse({
         const min = c.req.query("minRating") || c.req.query("min") || "";
         const from = c.req.query("dateFrom") || c.req.query("from") || "";
         const to = c.req.query("dateTo") || c.req.query("to") || "";
+        const organisation_id = c.get("organisation_id");
         return buildCacheKey("googleReviews", {
             page,
             per,
             min,
             from,
             to,
+            organisation_id,
         });
     },
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const { page, perPage, start, end } = parsePagination(c);
     // parse optional minRating filter (1..5)
     const minRaw = c.req.query("minRating") || c.req.query("min");
@@ -75,6 +79,7 @@ googleReviews.get("/", cacheResponse({
     if (dateToIso) {
         query = query.lte("publishTime", dateToIso);
     }
+    query = query.eq("organisation_id", organisation_id);
     const { data, error, count } = await query
         .order("publishTime", { ascending: false })
         .range(start, end);
@@ -84,11 +89,11 @@ googleReviews.get("/", cacheResponse({
         ? data.map((row) => ({
             ...row,
             GoogleReviewText: Array.isArray(row.GoogleReviewText)
-                ? row.GoogleReviewText[0] ?? null
-                : row.GoogleReviewText ?? null,
+                ? (row.GoogleReviewText[0] ?? null)
+                : (row.GoogleReviewText ?? null),
             GoogleAuthorAttribution: Array.isArray(row.GoogleAuthorAttribution)
-                ? row.GoogleAuthorAttribution[0] ?? null
-                : row.GoogleAuthorAttribution ?? null,
+                ? (row.GoogleAuthorAttribution[0] ?? null)
+                : (row.GoogleAuthorAttribution ?? null),
         }))
         : [];
     const total = typeof count === "number" ? count : normalized.length;
@@ -115,6 +120,8 @@ googleReviews.post("/fetchReviewsFromGoogle", rateLimit({
 }), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     if (!GOOGLE_PLACES_API_KEY || !placeId) {
         return c.json({
             error: "Missing GOOGLE_PLACES_API_KEY or DIVA_SALON_GOOGLE_PLACE_ID",
@@ -144,7 +151,8 @@ googleReviews.post("/fetchReviewsFromGoogle", rateLimit({
                 const { count, error: existsError } = await supabase
                     .from("GooglePlaceReview")
                     .select("name", { count: "exact", head: true })
-                    .eq("name", review.name);
+                    .eq("name", review.name)
+                    .eq("organisation_id", organisation_id);
                 if (existsError) {
                     throw new Error(`Failed to check existing review: ${existsError.message}`);
                 }
@@ -159,6 +167,7 @@ googleReviews.post("/fetchReviewsFromGoogle", rateLimit({
                     publishTime: review.publishTime,
                     flagContentUri: review.flagContentUri,
                     googleMapsUri: review.googleMapsUri,
+                    organisation_id: organisation_id,
                 })
                     .select("id")
                     .single();
@@ -172,6 +181,7 @@ googleReviews.post("/fetchReviewsFromGoogle", rateLimit({
                         text: text?.text,
                         languageCode: text?.languageCode,
                         GooglePlaceReviewId: reviewId.id,
+                        organisation_id: organisation_id,
                     })
                         .select("id")
                         .single();
@@ -189,6 +199,7 @@ googleReviews.post("/fetchReviewsFromGoogle", rateLimit({
                         uri: authorAttribution?.uri,
                         photoUri: authorAttribution?.photoUri,
                         GooglePlaceReviewId: reviewId.id,
+                        organisation_id: organisation_id,
                     })
                         .select("id")
                         .single();

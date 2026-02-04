@@ -15,19 +15,24 @@ eposNowCategories.get("/", cacheResponse({
     key: (c) => {
         const page = Number(c.req.query("page") || 1);
         const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+        const organisation_id = c.get("organisation_id");
         return buildCacheKey("eposNowCategories", {
             page,
             per,
+            organisation_id,
         });
     },
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const { page, perPage, start, end } = parsePagination(c);
     const { data, error, count } = await supabase
         .from("EposNowCategory")
         .select("*", { count: "exact" })
+        .eq("organisation_id", organisation_id)
         .range(start, end);
     if (error)
         return c.json({ error: error.message }, 500);
@@ -47,6 +52,8 @@ eposNowCategories.get("/", cacheResponse({
 eposNowCategories.post("/insertNewCategories", async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     // fetch properly and check status
     const res = await fetch(EPOS_NOW_URL + "/Category", {
         method: "GET",
@@ -71,6 +78,7 @@ eposNowCategories.post("/insertNewCategories", async (c) => {
         ParentId: cat.ParentId ?? null,
         RootParentId: cat.RootParentId ?? null,
         ShowOnTill: cat.ShowOnTill,
+        organisation_id,
         ImageUrl: cat.ImageUrl ?? null,
         updated_at: new Date().toISOString(),
     }));
