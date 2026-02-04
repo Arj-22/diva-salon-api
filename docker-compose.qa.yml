@@ -10,7 +10,7 @@ services:
       NODE_ENV: qa
       REDIS_URL: redis://redis:6379
     ports:
-      - "3002:3001"
+      - "3002:3002"
     depends_on:
       - redis
     restart: unless-stopped
