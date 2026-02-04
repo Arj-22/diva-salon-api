@@ -28,21 +28,27 @@ treatmentCategories.get("/", cacheResponse({
         const page = Number(c.req.query("page") || 1);
         const per = Number(c.req.query("perPage") || c.req.query("per") || 21);
         const active = c.req.query("active") || "";
+        const organisation_id = c.get("organisation_id");
         return buildCacheKey("treatmentCategories", {
             page,
             per,
             active,
+            organisation_id,
         });
     },
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const { page, perPage, start, end } = parsePagination(c);
     const activeFilter = parseActiveFilter(c);
+    console.log(organisation_id);
     let query = supabase
         .from("TreatmentCategory")
-        .select("*", { count: "exact" });
+        .select("*", { count: "exact" })
+        .eq("organisation_id", organisation_id);
     if (typeof activeFilter === "boolean") {
         query = query.eq("showOnWeb", activeFilter);
     }
@@ -62,18 +68,36 @@ treatmentCategories.get("/", cacheResponse({
         },
     });
 });
+treatmentCategories.get("namesWithIds", async (c) => {
+    if (!supabase)
+        return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
+    const { data, error } = await supabase
+        .from("TreatmentCategory")
+        .select("id, name")
+        .eq("organisation_id", organisation_id)
+        .order("name", { ascending: true });
+    if (error)
+        return c.json({ error: error.message }, 500);
+    return c.json({ treatmentCategories: data || [] });
+});
 treatmentCategories.get("/activeSlugs", cacheResponse({
-    key: () => buildCacheKey("treatmentCategories", {
+    key: (c) => buildCacheKey("treatmentCategories", {
         route: "activeSlugs",
+        organisation_id: c.get("organisation_id"),
     }),
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const { data, error } = await supabase
         .from("TreatmentCategory")
         .select("href")
-        .eq("showOnWeb", true);
+        .eq("showOnWeb", true)
+        .eq("organisation_id", organisation_id);
     if (error)
         return c.json({ error: error.message }, 500);
     const slugs = Array.isArray(data)
@@ -85,16 +109,20 @@ treatmentCategories.get("/:id{[0-9]+}", cacheResponse({
     key: (c) => buildCacheKey("treatmentCategories", {
         route: "byId",
         id: c.req.param("id"),
+        organisation_id: c.get("organisation_id"),
     }),
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const id = Number(c.req.param("id"));
     const { data, error } = await supabase
         .from("TreatmentCategory")
         .select("*")
         .eq("id", id)
+        .eq("organisation_id", organisation_id)
         .single();
     if (error)
         return c.json({ error: error.message }, 500);
@@ -103,6 +131,8 @@ treatmentCategories.get("/:id{[0-9]+}", cacheResponse({
 treatmentCategories.post("/", async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const body = await c.req.json();
     const parsed = await TreatmentCategoryInsertSchema.safeParseAsync(body);
     if (!parsed.success) {
@@ -110,7 +140,10 @@ treatmentCategories.post("/", async (c) => {
     }
     const { data, error } = await supabase
         .from("TreatmentCategory")
-        .insert(parsed.data)
+        .insert({
+        ...parsed.data,
+        organisation_id: organisation_id,
+    })
         .select()
         .single();
     if (error)
@@ -121,6 +154,8 @@ treatmentCategories.post("/", async (c) => {
 treatmentCategories.patch("/:id{[0-9]+}", async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const body = await c.req.json();
     const parsed = await TreatmentCategoryUpdateSchema.safeParseAsync(body);
     if (!parsed.success) {
@@ -130,6 +165,7 @@ treatmentCategories.patch("/:id{[0-9]+}", async (c) => {
         .from("TreatmentCategory")
         .update(parsed.data)
         .eq("id", Number(c.req.param("id")))
+        .eq("organisation_id", organisation_id)
         .select()
         .single();
     if (error)
@@ -143,9 +179,12 @@ treatmentCategories.patch("/:id{[0-9]+}", async (c) => {
 treatmentCategories.post("/createCategoriesForEposCategories", async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const { data: eposCategories, error: eposError } = await supabase
         .from("EposNowCategory")
-        .select("*");
+        .select("*")
+        .eq("organisation_id", organisation_id);
     if (eposError) {
         return c.json({ error: eposError.message }, 500);
     }
@@ -156,7 +195,8 @@ treatmentCategories.post("/createCategoriesForEposCategories", async (c) => {
     // Fetch all existing category IDs at once
     const { data: existingCats, error: existingCatsError } = await supabase
         .from("TreatmentCategory")
-        .select("eposNowCategoryId");
+        .select("eposNowCategoryId")
+        .eq("organisation_id", organisation_id);
     if (existingCatsError) {
         return c.json({ error: existingCatsError.message }, 500);
     }
@@ -171,6 +211,7 @@ treatmentCategories.post("/createCategoriesForEposCategories", async (c) => {
             description: eposCat.Description,
             eposNowCategoryId: eposCat.CategoryIdEpos,
             imageUrl: eposCat.ImageUrl,
+            organisation_id: organisation_id,
         })
             .select()
             .single();

@@ -16,19 +16,24 @@ eposNowTreatments.get("/", cacheResponse({
     key: (c) => {
         const page = Number(c.req.query("page") || 1);
         const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+        const organisation_id = c.get("organisation_id");
         return buildCacheKey("eposNowTreatments", {
             page,
             per,
+            organisation_id,
         });
     },
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const { page, perPage, start, end } = parsePagination(c);
     const { data, error, count } = await supabase
         .from("EposNowTreatment")
         .select("*", { count: "exact" })
+        .eq("organisation_id", organisation_id)
         .range(start, end);
     if (error)
         return c.json({ error: error.message }, 500);
@@ -50,7 +55,8 @@ eposNowTreatments.get("/byCategory", cacheIdsViaAll({
     key: (c) => {
         const page = Number(c.req.query("page") || 1);
         const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
-        return `eposNowTreatments:byCategory:${c.req.query("category")}:page:${page}:per:${per}`;
+        const organisation_id = c.get("organisation_id");
+        return `eposNowTreatments:byCategory:${c.req.query("category")}:page:${page}:per:${per}:organisation_id:${organisation_id}`;
     },
     allKey: "eposNowTreatments:all",
     ttlSeconds: 120,
@@ -66,6 +72,8 @@ eposNowTreatments.get("/byCategory", cacheIdsViaAll({
 }), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const category = c.req.query("category");
     if (!category)
         return c.json({ error: "category is required" }, 400);
@@ -74,6 +82,7 @@ eposNowTreatments.get("/byCategory", cacheIdsViaAll({
         .from("EposNowTreatment")
         .select("*", { count: "exact" })
         .eq("EposCategoryId", category)
+        .eq("organisation_id", organisation_id)
         .range(start, end);
     if (error)
         return c.json({ error: error.message }, 500);
@@ -96,11 +105,14 @@ eposNowTreatments.get("/:id{[0-9]+}", cacheResponse({
     key: (c) => buildCacheKey("eposNowTreatments", {
         route: "byId",
         id: c.req.param("id"),
+        organisation_id: c.get("organisation_id"),
     }),
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const id = Number(c.req.param("id"));
     if (!Number.isInteger(id))
         return c.json({ error: "Invalid id" }, 400);
@@ -108,11 +120,13 @@ eposNowTreatments.get("/:id{[0-9]+}", cacheResponse({
         .from("EposNowTreatment")
         .select("*")
         .eq("id", id)
+        .eq("organisation_id", organisation_id)
         .single();
     if (error)
         return c.json({ error: error.message }, 500);
     return c.json({ eposNowTreatments: data });
 });
+// refactor to usorganisation specific epos now url
 eposNowTreatments.get("/getEposProducts", async (c) => {
     // fetch properly and check status
     const res = await fetch(EPOS_NOW_URL + "/Product", {
@@ -155,6 +169,8 @@ eposNowTreatments.post("insertTreatmentsByEposCategory", async (c) => {
     if (!EPOS_NOW_URL) {
         return c.json({ error: "EPOS_NOW_URL not configured" }, 500);
     }
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const body = await c.req.json();
     const eposCategoryId = body.eposCategoryId;
     if (typeof eposCategoryId !== "number") {
@@ -189,6 +205,7 @@ eposNowTreatments.post("insertTreatmentsByEposCategory", async (c) => {
         SalePriceExTax: !t.IsSalePriceIncTax ? t.SalePrice : null,
         EposCategoryId: t.CategoryId ?? null,
         updated_at: new Date().toISOString(),
+        organisation_id,
     }));
     // Upsert in a single call using Name to determine conflicts
     const { data: upserted, error: upsertError } = await supabase
@@ -206,6 +223,8 @@ eposNowTreatments.post("insertTreatmentsByEposCategory", async (c) => {
 eposNowTreatments.post("/insertNewTreatments", async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     // fetch properly and check status
     const res = await fetch(EPOS_NOW_URL + "/Product", {
         method: "GET",
@@ -238,6 +257,7 @@ eposNowTreatments.post("/insertNewTreatments", async (c) => {
         SalePriceExTax: !t.IsSalePriceIncTax ? t.SalePrice : null,
         EposCategoryId: t.CategoryId ?? null,
         updated_at: new Date().toISOString(),
+        organisation_id,
     }));
     // Upsert in a single call using Name to determine conflicts
     const { data: upserted, error: upsertError } = await supabase
