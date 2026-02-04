@@ -1,0 +1,12 @@
+FROM node:20-alpine
+WORKDIR /usr/src/app
+
+# Speed up npm install inside container
+ENV npm_config_loglevel=warn
+
+# Install deps (dev + prod) based on lockfile
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+# Default command (overridden by compose for dev)
+CMD ["npm", "run", "dev"]
