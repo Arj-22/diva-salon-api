@@ -22,4 +22,4 @@ jobs:
             cd /docker/diva-salon-api
             git fetch origin
             git reset --hard origin/main
-            docker compose up -d --build
+            docker compose -f compose.prod.yml up -d --build
