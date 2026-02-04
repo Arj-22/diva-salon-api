@@ -38,8 +38,8 @@ apiKeys.get(
     }
 
     const { data, error } = await supabase
-      .from("api_keys")
-      .select("id, name, created_at")
+      .from("ApiKeys")
+      .select("id, hashedKey, created_at")
       .order("created_at", { ascending: false });
 
     if (error) {

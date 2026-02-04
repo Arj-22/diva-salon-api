@@ -1,8 +1,46 @@
 import crypto from "node:crypto";
-import { BookingSchema, } from "../../utils/schemas/BookingSchema.js";
+import { BookingSchema, BookingUpdateSchema, } from "../../utils/schemas/BookingSchema.js";
+import { ClientSchema, } from "../../utils/schemas/ClientSchema.js";
 import { formatZodError } from "../../utils/helpers.js";
 import { getRedisClient } from "./redisClient.js";
 export function validateBooking(schema = BookingSchema) {
+    return async (c, next) => {
+        let body;
+        try {
+            body = await c.req.json();
+        }
+        catch {
+            return c.json({ error: "Invalid JSON body" }, 400);
+        }
+        const parsed = schema.safeParse(body);
+        if (!parsed.success) {
+            return c.json({
+                error: "Validation failed",
+                details: formatZodError(parsed.error),
+            }, 400);
+        }
+        c.set("bookingData", parsed.data);
+        await next();
+    };
+}
+export function validateClient(schema = ClientSchema) {
+    return async (c, next) => {
+        let body;
+        try {
+            body = await c.req.json();
+        }
+        catch {
+            return c.json({ error: "Invalid JSON body" }, 400);
+        }
+        const parsed = schema.safeParse(body);
+        if (!parsed.success) {
+            return c.json({ error: "Validation failed", details: formatZodError(parsed.error) }, 400);
+        }
+        c.set("clientData", parsed.data);
+        await next();
+    };
+}
+export function validateBookingUpdate(schema = BookingUpdateSchema) {
     return async (c, next) => {
         let body;
         try {

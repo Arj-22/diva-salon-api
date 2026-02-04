@@ -16,9 +16,11 @@ treatmentSubCategories.get("/", cacheResponse({
     key: (c) => {
         const page = Number(c.req.query("page") || 1);
         const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+        const organisation_id = c.get("organisation_id");
         return buildCacheKey("treatmentSubCategories", {
             page,
             per,
+            organisation_id,
         });
     },
     ttlSeconds: 300,
@@ -26,9 +28,12 @@ treatmentSubCategories.get("/", cacheResponse({
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
     const { page, perPage, start, end } = parsePagination(c);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const { data, error, count } = await supabase
         .from("TreatmentSubCategory")
         .select("*", { count: "exact" })
+        .eq("organisation_id", organisation_id)
         .range(start, end);
     if (error)
         return c.json({ error: error.message }, 500);
@@ -49,16 +54,20 @@ treatmentSubCategories.get("/:id{[0-9]+}", cacheResponse({
     key: (c) => buildCacheKey("treatmentSubCategories", {
         route: "byId",
         id: c.req.param("id"),
+        organisation_id: c.get("organisation_id"),
     }),
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const id = Number(c.req.param("id"));
     const { data, error } = await supabase
         .from("TreatmentSubCategory")
         .select("*")
         .eq("id", id)
+        .eq("organisation_id", organisation_id)
         .single();
     if (error)
         return c.json({ error: error.message }, 500);
@@ -69,13 +78,15 @@ treatmentSubCategories.post("/", async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
     const body = await c.req.json();
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const parsed = await TreatmentSubCategoryInsertSchema.safeParseAsync(body);
     if (!parsed.success) {
         return c.json(formatZodError(parsed.error), 400);
     }
     const { data, error } = await supabase
         .from("TreatmentSubCategory")
-        .insert(parsed.data)
+        .insert({ ...parsed.data, organisation_id })
         .select()
         .single();
     if (error)
@@ -86,6 +97,8 @@ treatmentSubCategories.post("/", async (c) => {
 treatmentSubCategories.patch("/:id{[0-9]+}", async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const id = Number(c.req.param("id"));
     if (isNaN(id)) {
         return c.json({ error: "Invalid ID" }, 400);
@@ -98,7 +111,7 @@ treatmentSubCategories.patch("/:id{[0-9]+}", async (c) => {
     }
     const { data, error } = await supabase
         .from("TreatmentSubCategory")
-        .update(parsed.data)
+        .update({ ...parsed.data, organisation_id })
         .eq("id", id)
         .select()
         .single();

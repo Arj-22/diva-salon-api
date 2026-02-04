@@ -10,6 +10,7 @@ export const TreatmentSchema = z.object({
     created_at: z.string(),
     treatmentCategoryId: z.number().int(),
     treatmentSubCategoryId: z.number().int().optional(),
+    durationInMinutes: z.number().int().optional(),
     showOnWeb: z.boolean().optional(),
 });
 export const TreatmentInsertSchema = TreatmentSchema.omit({
@@ -22,5 +23,6 @@ export const TreatmentInsertSchema = TreatmentSchema.omit({
     treatmentSubCategoryId: z
         .union([z.coerce.number().positive(), z.null()])
         .optional(),
+    durationInMinutes: z.number().int().optional(),
     showOnWeb: z.boolean().optional(),
 });

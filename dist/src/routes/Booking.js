@@ -1,13 +1,11 @@
 import { Hono } from "hono";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { validateBooking } from "../lib/validation-middleware.js";
-import { buildCacheKey, cacheResponse } from "../lib/cache-middleware.js";
+import { validateBooking, validateBookingUpdate, } from "../lib/validation-middleware.js";
+import { buildCacheKey, cacheInvalidate, cacheResponse, } from "../lib/cache-middleware.js";
 import { hcaptchaVerify } from "../lib/hcaptcha-middleware.js";
-import { sendEmail } from "../lib/mailer.js";
-import { bookingConfirmationTemplate } from "../../utils/emailTemplates/bookingConfirmation.js";
-import { parsePagination } from "../../utils/helpers.js";
-// import { sendMail } from "../lib/mailer.js";
+import { combineDateAndTime, overlaps, parsePagination, } from "../../utils/helpers.js";
+import { createBookingRecord } from "../lib/bookingActions.js";
 const bookings = new Hono();
 config({ path: ".env" });
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -15,183 +13,117 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBL
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
     ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
     : null;
+const ADMIN_BOOKING_SECRET = process.env.ADMIN_BOOKING_SECRET;
 bookings.post("/", hcaptchaVerify({ bodyField: "hcaptcha_token" }), validateBooking(), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
-    // Use validated booking data (avoid re-parsing)
-    const res = await c.req.json();
-    const bookingData = {
-        name: res.name,
-        email: res.email,
-        phone: res.phone,
-        message: res.message,
-        treatmentIds: res.treatmentIds,
-    };
-    // Find or create client
-    const emailLower = bookingData.email?.toLowerCase().trim();
-    let clientRow = null;
-    let newClientCreated = false;
-    if (emailLower) {
-        const { data: existingByEmail, error: findEmailError } = await supabase
-            .from("Client")
-            .select("id,name,email,phoneNumber")
-            .eq("email", emailLower)
-            .limit(1)
-            .maybeSingle();
-        if (findEmailError) {
-            return c.json({
-                error: "Failed to query client by email",
-                details: findEmailError.message,
-            }, 500);
-        }
-        if (existingByEmail) {
-            clientRow = existingByEmail;
-        }
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
+    const payload = await c.req.json();
+    return createBookingRecord(c, {
+        ...payload,
+        organisation_id,
+    });
+});
+bookings.post("/admin", validateBooking(), async (c) => {
+    if (!supabase)
+        return c.json({ error: "Supabase not configured" }, 500);
+    if (!ADMIN_BOOKING_SECRET) {
+        return c.json({ error: "Admin booking secret not configured" }, 500);
     }
-    // Optional fallback: if no email or not found, try phone match
-    if (!clientRow && bookingData.phone) {
-        const phoneNorm = bookingData.phone.trim();
-        const { data: existingByPhone, error: findPhoneError } = await supabase
-            .from("Client")
-            .select("id,name,email,phoneNumber")
-            .eq("phoneNumber", phoneNorm)
-            .limit(1)
-            .maybeSingle();
-        if (findPhoneError) {
-            return c.json({
-                error: "Failed to query client by phone",
-                details: findPhoneError.message,
-            }, 500);
-        }
-        if (existingByPhone) {
-            clientRow = existingByPhone;
-        }
+    const provided = c.req.header("x-admin-booking-secret");
+    if (provided !== ADMIN_BOOKING_SECRET) {
+        return c.json({ error: "Forbidden" }, 403);
     }
-    if (!clientRow) {
-        const { data: createdClient, error: createClientError } = await supabase
-            .from("Client")
-            .insert({
-            name: bookingData.name,
-            email: emailLower || null,
-            phoneNumber: bookingData.phone?.trim() || null,
-        })
-            .select("id,name,email,phoneNumber")
-            .single();
-        if (createClientError || !createdClient) {
-            return c.json({
-                error: "Failed to create client",
-                details: createClientError?.message,
-            }, 500);
-        }
-        clientRow = createdClient;
-        newClientCreated = true;
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
+    if (!organisation_id) {
+        return c.json({ error: "Missing organisation context" }, 400);
     }
-    // Define booking payload now with real clientId
-    const bookingPayload = {
-        message: bookingData.message || null,
-        clientId: clientRow.id,
-    };
-    const { data: bookingRow, error: bookingError } = await supabase
+    const payload = await c.req.json();
+    return createBookingRecord(c, {
+        ...payload,
+        organisation_id,
+    });
+});
+bookings.patch("/:bookingId{[0-9]+}", validateBookingUpdate(), async (c) => {
+    if (!supabase)
+        return c.json({ error: "Supabase not configured" }, 500);
+    const id = Number(c.req.param("bookingId"));
+    const updateData = await c.req.json();
+    const { data: updatedBooking, error } = await supabase
         .from("Booking")
-        .insert(bookingPayload)
-        .select("id,message,clientId")
+        .update(updateData)
+        .eq("id", id)
+        .select("*")
         .single();
-    if (bookingError || !bookingRow) {
-        // Roll back newly created client if desired (best-effort)
-        if (newClientCreated) {
-            await supabase.from("Client").delete().eq("id", clientRow.id);
-        }
-        return c.json({ error: "Failed to create booking", details: bookingError?.message }, 500);
+    if (error) {
+        return c.json({ error: "Failed to update booking", details: error.message }, 500);
     }
-    // 3. Link treatments
-    const treatmentIds = Array.isArray(bookingData.treatmentIds)
-        ? bookingData.treatmentIds
-        : [];
-    if (treatmentIds.length === 0) {
-        // Clean up booking (and possibly client) if no treatments
-        await supabase.from("Booking").delete().eq("id", bookingRow.id);
-        if (newClientCreated) {
-            await supabase.from("Client").delete().eq("id", clientRow.id);
-        }
-        return c.json({ error: "No treatmentIds provided" }, 400);
-    }
-    const treatmentBookingPayload = treatmentIds.map((tid) => ({
-        treatmentId: tid,
-        bookingId: bookingRow.id,
-    }));
-    const { error: tbError } = await supabase
-        .from("Treatment_Booking")
-        .insert(treatmentBookingPayload);
-    if (tbError) {
-        // Roll back booking and (optionally) client
-        await supabase.from("Booking").delete().eq("id", bookingRow.id);
-        if (newClientCreated) {
-            await supabase.from("Client").delete().eq("id", clientRow.id);
-        }
-        return c.json({ error: "Failed to link treatments", details: tbError.message }, 500);
-    }
-    const { data: selectedTreatments, error: selectTreatmentsError } = await supabase
-        .from("Treatment")
-        .select(`EposNowTreatment(*)`)
-        .in("id", treatmentIds);
-    if (selectTreatmentsError) {
-        console.error("Failed to fetch selected treatments:", selectTreatmentsError);
-        return c.json({ error: "Failed to fetch selected treatments" }, 500);
-    }
-    // Ensure the template receives a single EposNowTreatment object per item.
-    const treatmentsForEmail = (selectedTreatments ?? [])
-        .map((t) => {
-        const epos = Array.isArray(t.EposNowTreatment)
-            ? t.EposNowTreatment[0]
-            : t.EposNowTreatment;
-        return epos ? { EposNowTreatment: epos } : null;
-    })
-        .filter(Boolean);
-    try {
-        await sendEmail({
-            to: [bookingData.email],
-            subject: "New Booking Created",
-            html: bookingConfirmationTemplate({
-                name: bookingData.name,
-                treatments: treatmentsForEmail,
-                message: bookingData.message,
-            }),
-        });
-    }
-    catch (err) {
-        console.error("Error sending email:", err);
-        return c.json({ error: "Failed to send email" }, 500);
-    }
-    return c.json({
-        message: "Booking created",
-        booking: {
-            id: bookingRow.id,
-            message: bookingRow.message,
-            client: clientRow,
-            treatmentIds,
-            newClient: newClientCreated,
-        },
-    }, 201);
+    cacheInvalidate("bookings:*");
+    cacheInvalidate("availability:*");
+    return c.json({ message: "Booking updated", booking: updatedBooking });
 });
 bookings.get("/", cacheResponse({
     key: (c) => {
         const page = Number(c.req.query("page") || 1);
         const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+        const status = c.req.query("status");
+        const clientId = c.req.query("clientId");
+        const appointmentDate = c.req.query("appointmentDate");
+        const organisationId = c.get("organisation_id");
+        const staffId = c.req.query("staffId");
         return buildCacheKey("bookings", {
             page,
             per,
+            status,
+            clientId,
+            appointmentDate,
+            organisationId,
+            staffId,
         });
     },
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    const status = c.req.query("status");
+    const clientId = c.req.query("clientId");
+    const appointmentDate = c.req.query("appointmentDate");
+    const staffId = Number(c.req.query("staffId"));
     const { page, perPage, start, end } = parsePagination(c);
-    const { data, error, count } = await supabase
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
+    let query = supabase
         .from("Booking")
-        .select(`id, message, created_at, Client (id, name, email, phoneNumber), Treatment_Booking (treatmentId)`, { count: "exact" })
+        .select(`*, Client (id, name, email, phoneNumber), Treatment(*, EposNowTreatment(Name, SalePriceIncTax)), Staff(id, first_name)  `, { count: "exact" })
         .order("created_at", { ascending: false })
         .range(start, end);
+    if (status && status !== "all") {
+        query = query.eq("status", status);
+    }
+    if (clientId && clientId !== null) {
+        query = query.eq("clientId", clientId);
+    }
+    if (organisation_id) {
+        query = query.eq("organisation_id", organisation_id);
+    }
+    if (staffId && staffId > 0) {
+        query = query.eq("staffId", staffId);
+    }
+    if (appointmentDate) {
+        const dateStart = new Date(appointmentDate);
+        if (Number.isNaN(dateStart.getTime())) {
+            return c.json({ error: "Invalid appointmentDate" }, 400);
+        }
+        const dateEnd = new Date(dateStart);
+        dateStart.setHours(0, 0, 0, 0);
+        dateEnd.setHours(23, 59, 59, 999);
+        query = query
+            .gte("appointmentStartTime", dateStart.toISOString())
+            .lte("appointmentStartTime", dateEnd.toISOString());
+    }
+    const { data, error, count } = await query;
     if (error) {
         return c.json({ error: "Failed to fetch bookings", details: error.message }, 500);
     }
@@ -202,9 +134,14 @@ bookings.get("/", cacheResponse({
     const bookingsList = rows.map((booking) => ({
         id: booking.id,
         message: booking.message,
+        status: booking.status,
+        appointmentStartTime: booking.appointmentStartTime,
+        appointmentEndTime: booking.appointmentEndTime,
+        treatmentId: booking.treatmentId,
+        treatment: booking.Treatment,
         created_at: booking.created_at,
         client: booking.Client,
-        treatmentIds: booking.Treatment_Booking.map((tb) => tb.treatmentId),
+        staff: booking.Staff,
     }));
     return c.json({
         bookings: bookingsList,
@@ -215,6 +152,7 @@ bookings.get("/byBookingId/:bookingId{[0-9]+}", cacheResponse({
     key: (c) => buildCacheKey("bookings", {
         route: "byBookingId",
         bookingId: c.req.param("bookingId"),
+        organisation_id: c.get("organisation_id"),
     }),
     ttlSeconds: 300,
 }), async (c) => {
@@ -223,7 +161,7 @@ bookings.get("/byBookingId/:bookingId{[0-9]+}", cacheResponse({
     const id = Number(c.req.param("bookingId"));
     const { data, error } = await supabase
         .from("Booking")
-        .select(`id, message, created_at, Client (id, name, email, phoneNumber), Treatment_Booking (treatmentId)`)
+        .select(`*, Client (id, name, email, phoneNumber), Treatment(*, EposNowTreatment(Name, SalePriceIncTax)) `)
         .eq("id", id)
         .single();
     if (error) {
@@ -235,9 +173,13 @@ bookings.get("/byBookingId/:bookingId{[0-9]+}", cacheResponse({
     const booking = {
         id: data.id,
         message: data.message,
+        status: data.status,
+        appointmentStartTime: data.appointmentStartTime,
+        appointmentEndTime: data.appointmentEndTime,
+        treatmentId: data.treatmentId,
         created_at: data.created_at,
         client: data.Client,
-        treatmentIds: data.Treatment_Booking.map((tb) => tb.treatmentId),
+        treatment: data.Treatment,
     };
     return c.json({ booking });
 });
@@ -245,23 +187,28 @@ bookings.get("/byClientId/:clientId{[0-9]+}", cacheResponse({
     key: (c) => {
         const page = Number(c.req.query("page") || 1);
         const per = Number(c.req.query("perPage") || c.req.query("per") || 20);
+        const organisation_id = c.get("organisation_id");
         return buildCacheKey("bookings", {
             route: "byClientId",
             clientId: c.req.param("clientId"),
             page,
             per,
+            organisation_id,
         });
     },
     ttlSeconds: 300,
 }), async (c) => {
     if (!supabase)
         return c.json({ error: "Supabase not configured" }, 500);
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
     const clientId = Number(c.req.param("clientId"));
     const { page, perPage, start, end } = parsePagination(c);
     const { data, error, count } = await supabase
         .from("Booking")
-        .select(`*, Client(id, name, email, phoneNumber), Treatment_Booking (treatmentId)`, { count: "exact" })
+        .select(`*, Client(id, name, email, phoneNumber), Treatment(*, EposNowTreatment(Name, SalePriceIncTax)) `, { count: "exact" })
         .eq("clientId", clientId)
+        .eq("organisation_id", organisation_id)
         .order("created_at", { ascending: false })
         .range(start, end);
     if (error) {
@@ -276,11 +223,94 @@ bookings.get("/byClientId/:clientId{[0-9]+}", cacheResponse({
         message: booking.message,
         created_at: booking.created_at,
         client: booking.Client,
-        treatmentIds: booking.Treatment_Booking.map((tb) => tb.treatmentId),
+        status: booking.status,
+        appointmentStartTime: booking.appointmentStartTime,
+        appointmentEndTime: booking.appointmentEndTime,
+        treatmentId: booking.treatmentId,
+        treatment: booking.Treatment,
     }));
     return c.json({
         bookings: bookingsList,
         meta: { total, page, perPage, totalPages },
+    });
+});
+bookings.get("/availability", cacheResponse({
+    key: (c) => {
+        const treatmentId = c.req.query("treatmentId");
+        const date = c.req.query("date");
+        const organisation_id = c.get("organisation_id");
+        return buildCacheKey("availability", {
+            treatmentId,
+            date,
+            organisation_id,
+        });
+    },
+    ttlSeconds: 60,
+}), async (c) => {
+    const treatmentId = c.req.query("treatmentId");
+    const date = c.req.query("date"); // YYYY-MM-DD
+    if (!treatmentId || !date) {
+        return c.json({ error: "Missing parameters" }, 400);
+    }
+    if (!supabase) {
+        return c.json({ error: "Supabase not configured" }, 500);
+    }
+    //@ts-ignore
+    const organisation_id = c.get("organisation_id");
+    // 1️⃣ Get treatment duration
+    const { data: treatment } = await supabase
+        .from("Treatment")
+        .select("durationInMinutes")
+        .eq("id", treatmentId)
+        .eq("showOnWeb", true)
+        .eq("organisation_id", organisation_id)
+        .single();
+    if (!treatment) {
+        return c.json({ error: "Treatment not found" }, 404);
+    }
+    const duration = treatment.durationInMinutes;
+    // 2️⃣ Get business hours
+    const dayOfWeek = new Date(date).getDay();
+    const { data: hours } = await supabase
+        .from("OpeningHours")
+        .select("opens_at, closes_at")
+        .eq("Day", dayOfWeek)
+        .eq("organisation_id", organisation_id)
+        .single();
+    if (!hours) {
+        return c.json({ slots: [] });
+    }
+    const dayStart = combineDateAndTime(date, hours.opens_at);
+    const dayEnd = combineDateAndTime(date, hours.closes_at);
+    const now = new Date();
+    const isToday = date === now.toISOString().slice(0, 10);
+    // 3️⃣ Fetch bookings
+    const { data: bookings } = await supabase
+        .from("Booking")
+        .select("appointmentStartTime, appointmentEndTime")
+        // .neq("status", "cancelled")
+        .gte("appointmentStartTime", dayStart.toISOString())
+        .lte("appointmentEndTime", dayEnd.toISOString())
+        .eq("organisation_id", organisation_id);
+    // 4️⃣ Generate slots
+    const slots = [];
+    const slotIncrementMinutes = 10;
+    for (let cursor = new Date(dayStart); cursor.getTime() + duration * 60000 <= dayEnd.getTime(); cursor = new Date(cursor.getTime() + slotIncrementMinutes * 60000)) {
+        const slotStart = new Date(cursor);
+        const slotEnd = new Date(slotStart.getTime() + duration * 60000);
+        if (isToday && slotStart <= now) {
+            continue;
+        }
+        const conflict = bookings?.some((b) => overlaps(slotStart, slotEnd, new Date(b.appointmentStartTime), new Date(b.appointmentEndTime)));
+        if (!conflict) {
+            slots.push(slotStart.toISOString().slice(11, 16));
+        }
+    }
+    return c.json({
+        date,
+        treatmentId: treatmentId,
+        durationInMinutes: duration,
+        slots,
     });
 });
 export default bookings;
