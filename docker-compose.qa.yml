@@ -1,15 +1,30 @@
 services:
   divasalonapi:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: divasalonapi-qa
     env_file:
       - .env.qa
     environment:
       NODE_ENV: qa
       REDIS_URL: redis://redis:6379
     ports:
-      - "3002:3002"
+      - "3002:3001"
+    depends_on:
+      - redis
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3002/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-qa-data:/data
+    restart: unless-stopped
+
+volumes:
+  redis-qa-data:
