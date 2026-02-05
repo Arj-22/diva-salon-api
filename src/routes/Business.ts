@@ -128,20 +128,35 @@ business.patch("/openingHours", async (c) => {
     updated_at: new Date().toISOString(),
   }));
 
-  const { data, error } = await supabase
-    .from("OpeningHours")
-    .update(rows)
-    .select()
-    .eq("organisation_id", organisation_id)
-    .eq("Day", rows[0].Day)
-    .order("Day");
+  console.log("Updating opening hours with rows:", rows);
 
-  if (error) {
-    console.error("Error updating opening hours:", error);
+  try {
+    const results = await Promise.all(
+      rows.map((row) =>
+        supabase
+          .from("OpeningHours")
+          .update({
+            opens_at: row.opens_at,
+            closes_at: row.closes_at,
+            is_closed: row.is_closed,
+            updated_at: row.updated_at,
+          })
+          .eq("organisation_id", organisation_id)
+          .eq("Day", row.Day),
+      ),
+    );
+
+    const failed = results.find((res) => res.error);
+    if (failed?.error) {
+      console.error("Error updating opening hours:", failed.error);
+      return c.json({ error: "Failed to update opening hours" }, 500);
+    }
+  } catch (err) {
+    console.error("Unexpected error updating opening hours:", err);
     return c.json({ error: "Failed to update opening hours" }, 500);
   }
 
-  return c.json({ openingHours: data });
+  return c.json({ message: "Opening hours updated", openingHours: rows });
 });
 
 export default business;
