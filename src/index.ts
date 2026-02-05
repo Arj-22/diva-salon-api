@@ -16,13 +16,13 @@ import formSubmissions from "./routes/FormSubmissions.js";
 import staff from "./routes/Staff.js";
 import webhooks from "./routes/Webhooks.js";
 import { organizationMiddleware } from "./lib/organization-middleware.js";
+import business from "./routes/Business.js";
 
 const app = new Hono();
 
 app.use(
   "*",
   apiKeyAuth({
-    // Configure via env API_KEYS="key1,key2"
     // Exclude health if you want it public:
     exclude: ["/health", "/webhooks"], // remove this line to protect /health too
   }),
@@ -45,6 +45,7 @@ app.route("/sendMail", email);
 app.route("/apiKeys", apiKeys);
 app.route("/health", health);
 app.route("/webhooks", webhooks);
+app.route("/business", business);
 
 serve(
   {
