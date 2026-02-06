@@ -55,7 +55,6 @@ apiKeys.post("/", apiKeyAuth(), async (c) => {
     return c.json({ error: "Supabase client not configured" }, { status: 500 });
   }
   const body = await c.req.json();
-
   if (!body.organisation_id) {
     return c.json({ error: "organisation_id is required" }, { status: 400 });
   }
@@ -64,17 +63,16 @@ apiKeys.post("/", apiKeyAuth(), async (c) => {
 
   const { data, error } = await supabase
     .from("ApiKeys")
-    .insert([
-      {
-        keyId: keyId,
-        hashedKey: hashedKey,
-        organisation_id: body.organisation_id,
-      },
-    ])
+    .insert({
+      keyId: keyId,
+      hashedKey: hashedKey,
+      organisation_id: body.organisation_id,
+    })
     .select()
     .single();
 
   if (error) {
+    console.error("Error inserting API key into database:", error);
     return c.json({ error: error.message }, { status: 500 });
   }
   if (!data) {
