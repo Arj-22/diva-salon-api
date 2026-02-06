@@ -105,58 +105,37 @@ business.post("/openingHours", async (c) => {
 
   return c.json({ openingHours: data });
 });
-business.patch("/openingHours", async (c) => {
+
+business.patch("/openingHours/:id", async (c) => {
   if (!supabase) return c.text("Supabase not configured", 500);
   //@ts-ignore
   const organisation_id = c.get("organisation_id");
+  const { id } = c.req.param();
   const body = await c.req.json();
-  const openingHours = body?.openingHours;
 
-  if (!Array.isArray(openingHours) || openingHours.length === 0) {
-    return c.json({ error: "openingHours array is required" }, 400);
-  }
+  const { data, error } = await supabase
+    .from("OpeningHours")
+    .update({
+      Day: body.Day,
+      opens_at: body.opens_at,
+      closes_at: body.closes_at,
+      is_closed:
+        typeof body.is_closed === "boolean"
+          ? body.is_closed
+          : Boolean(body.isClosed),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("organisation_id", organisation_id)
+    .eq("id", id)
+    .select()
+    .single();
 
-  const rows = openingHours.map((row: any) => ({
-    organisation_id,
-    Day: row.Day,
-    opens_at: row.opens_at,
-    closes_at: row.closes_at,
-    is_closed:
-      typeof row.is_closed === "boolean"
-        ? row.is_closed
-        : Boolean(row.isClosed),
-    updated_at: new Date().toISOString(),
-  }));
-
-  console.log("Updating opening hours with rows:", rows);
-
-  try {
-    const results = await Promise.all(
-      rows.map((row) =>
-        supabase
-          .from("OpeningHours")
-          .update({
-            opens_at: row.opens_at,
-            closes_at: row.closes_at,
-            is_closed: row.is_closed,
-            updated_at: row.updated_at,
-          })
-          .eq("organisation_id", organisation_id)
-          .eq("Day", row.Day),
-      ),
-    );
-
-    const failed = results.find((res) => res.error);
-    if (failed?.error) {
-      console.error("Error updating opening hours:", failed.error);
-      return c.json({ error: "Failed to update opening hours" }, 500);
-    }
-  } catch (err) {
-    console.error("Unexpected error updating opening hours:", err);
+  if (error) {
+    console.error("Error updating opening hours:", error);
     return c.json({ error: "Failed to update opening hours" }, 500);
   }
 
-  return c.json({ message: "Opening hours updated", openingHours: rows });
+  return c.json({ message: "Opening hours updated", openingHours: data });
 });
 
 export default business;
