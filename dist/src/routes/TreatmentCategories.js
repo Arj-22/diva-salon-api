@@ -44,7 +44,6 @@ treatmentCategories.get("/", cacheResponse({
     const organisation_id = c.get("organisation_id");
     const { page, perPage, start, end } = parsePagination(c);
     const activeFilter = parseActiveFilter(c);
-    console.log(organisation_id);
     let query = supabase
         .from("TreatmentCategory")
         .select("*", { count: "exact" })

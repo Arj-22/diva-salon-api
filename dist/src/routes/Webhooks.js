@@ -27,8 +27,8 @@ webhooks.post("/clerk-webhook", async (c) => {
         // 3️⃣ Idempotency: skip if already processed
         const { data: seen } = await supabase
             .from("WebhookEvents")
-            .select("id")
-            .eq("id", svixId)
+            .select("svix_id")
+            .eq("svix_id", svixId)
             .maybeSingle();
         if (seen) {
             return c.json({ message: "Already processed" }, 200);
@@ -62,7 +62,7 @@ webhooks.post("/clerk-webhook", async (c) => {
             const { error: webhookInsertError } = await supabase
                 .from("WebhookEvents")
                 .insert({
-                id: svixId,
+                svix_id: svixId,
                 type: event.type,
                 created_at: new Date().toISOString(),
             });
@@ -200,7 +200,7 @@ webhooks.post("/clerk-webhook", async (c) => {
                 }
             }
             await supabase.from("WebhookEvents").insert({
-                id: svixId,
+                svix_id: svixId,
                 type: event.type,
                 created_at: new Date().toISOString(),
             });
@@ -210,7 +210,7 @@ webhooks.post("/clerk-webhook", async (c) => {
         if (event.type !== "organizationInvitation.revoked" &&
             event.type !== "organizationInvitation.accepted") {
             await supabase.from("WebhookEvents").insert({
-                id: svixId,
+                svix_id: svixId,
                 type: event.type,
                 created_at: new Date().toISOString(),
             });
@@ -282,7 +282,7 @@ webhooks.post("/clerk-webhook", async (c) => {
                 return c.text("Database error", 500);
             }
             await supabase.from("WebhookEvents").insert({
-                id: svixId,
+                svix_id: svixId,
                 type: event.type,
                 created_at: new Date().toISOString(),
             });
@@ -302,7 +302,7 @@ webhooks.post("/clerk-webhook", async (c) => {
                 return c.text("Database error", 500);
             }
             await supabase.from("WebhookEvents").insert({
-                id: svixId,
+                svix_id: svixId,
                 type: event.type,
                 created_at: new Date().toISOString(),
             });
